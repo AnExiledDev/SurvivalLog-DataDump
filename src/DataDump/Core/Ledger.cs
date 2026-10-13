@@ -34,13 +34,42 @@ public enum LedgerOutcome
 
 public sealed record LedgerEntry(ActionStart Start, Moment End, LedgerOutcome Outcome);
 
+/// <summary>Which actions the ledger writes.</summary>
+public static class LedgerActions
+{
+    /// <summary>ActionType.Move. PlayAction itself treats it apart (ActionComponent.c:818).</summary>
+    public const int MoveActionType = 7;
+
+    /// <summary>Walking is most of what characters do and changes nothing the ledger is for, so it costs no sample and no line.</summary>
+    public static bool IsLogged(int actionType) => actionType != MoveActionType;
+}
+
 /// <summary>
 /// The open action of each character, between its start and its end. Holds one small record per character and does
-/// nothing between those two calls.
+/// nothing between those two calls. Character ids are only unique within one loaded save, so the book holds the
+/// actions of one world at a time.
 /// </summary>
 public sealed class LedgerBook
 {
     private readonly Dictionary<long, ActionStart> _open = new();
+    private long? _worldId;
+
+    /// <summary>
+    /// Notes the world the next calls are about. A different world (another save loaded) or none (back at the title
+    /// screen) drops every open action, so no line can start in one save and end in another.
+    /// </summary>
+    /// <returns>How many open actions were dropped.</returns>
+    public int EnterWorld(long? worldId)
+    {
+        if (worldId == _worldId) return 0;
+
+        var dropped = _open.Count;
+
+        _worldId = worldId;
+        _open.Clear();
+
+        return dropped;
+    }
 
     /// <summary>The action id open for the character, so a caller can skip sampling an end that matches nothing.</summary>
     public int? OpenActionOf(long agentId) => _open.TryGetValue(agentId, out var start) ? start.ActionId : null;
@@ -102,11 +131,11 @@ public static class LedgerTsv
     public static string Cell(string value) => value.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
 }
 
-/// <summary>When the ledger file moves aside, so it never grows past its cap by more than one line.</summary>
+/// <summary>When the ledger file moves aside, so it never grows past its cap by more than one batch of lines.</summary>
 public static class LedgerRotation
 {
     public const long MaxBytes = 5L * 1024 * 1024;
 
-    public static bool ShouldRotate(long currentBytes, long lineBytes, long maxBytes = MaxBytes) =>
-        currentBytes > 0 && currentBytes + lineBytes > maxBytes;
+    public static bool ShouldRotate(long currentBytes, long addedBytes, long maxBytes = MaxBytes) =>
+        currentBytes > 0 && currentBytes + addedBytes > maxBytes;
 }

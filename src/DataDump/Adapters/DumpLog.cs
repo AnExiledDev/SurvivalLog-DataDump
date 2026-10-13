@@ -26,7 +26,14 @@ internal sealed class DumpLog
 
     public void Write(string message)
     {
-        _bepinex.LogInfo(message);
+        try
+        {
+            _bepinex.LogInfo(message);
+        }
+        catch (Exception)
+        {
+            // A failing log listener costs the BepInEx copy, never the plugin; the file copy below still gets the line.
+        }
 
         lock (_gate)
         {

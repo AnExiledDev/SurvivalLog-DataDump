@@ -216,7 +216,11 @@ internal static class GameState
         return docs;
     }
 
-    /// <summary>Every attribute in AttributeComponent.AttrDict, by name; a fraction attribute carries GameKey.Attr_ScalingRatio.</summary>
+    /// <summary>
+    /// Every attribute in AttributeComponent.AttrDict, by name; a fraction attribute carries GameKey.Attr_ScalingRatio.
+    /// Attr's values are auto-properties, so their backing fields are read straight from memory: the property wrappers
+    /// would each be a call into the game and a boxed result, six per attribute, twice per ledger action.
+    /// </summary>
     private static SortedDictionary<string, AttrSample> AttrSamples(BaseAgent agent)
     {
         var samples = new SortedDictionary<string, AttrSample>(StringComparer.Ordinal);
@@ -232,7 +236,13 @@ internal static class GameState
 
             if (attr is null) continue;
 
-            samples[entry.Key.ToString()] = new AttrSample(attr.BaseValue, attr.StrengtheningValue, attr.ConditionValue, attr.Min, attr.Max, attr.isSingle ? scale : null);
+            samples[entry.Key.ToString()] = new AttrSample(
+                attr._BaseValue_k__BackingField,
+                attr._StrengtheningValue_k__BackingField,
+                attr._ConditionValue_k__BackingField,
+                attr._Min_k__BackingField,
+                attr._Max_k__BackingField,
+                attr._isSingle_k__BackingField ? scale : null);
         }
 
         return samples;
@@ -272,16 +282,16 @@ internal static class GameState
         return docs;
     }
 
-    /// <summary>Buff config id to name, for the ledger's gained and lost buffs.</summary>
+    /// <summary>Buff config id to name, for the ledger's gained and lost buffs. Auto-property backing fields, as in <see cref="AttrSamples"/>.</summary>
     private static Dictionary<int, string> BuffNames(BaseAgent agent)
     {
         var names = new Dictionary<int, string>();
 
         foreach (var buff in EffectiveBuffs(agent))
         {
-            var config = buff.config;
+            var config = buff._config_k__BackingField;
 
-            if (config is not null) names[config.ID] = config.Name ?? config.Name_Local ?? "";
+            if (config is not null) names[config._ID_k__BackingField] = config._Name_k__BackingField ?? config.Name_Local ?? "";
         }
 
         return names;

@@ -111,19 +111,68 @@ public class LedgerTests
         Assert.Equal("a b c d", LedgerTsv.Cell("a\tb\rc\nd"));
     }
 
-    // Moving the file aside before the line keeps it under the cap; an empty file never moves, however long the line.
+    // Moving the file aside before a batch keeps it under the cap; an empty file never moves, however big the batch.
     [Theory]
     [InlineData(0L, 10L, false)]
     [InlineData(4L, 1L, false)]
     [InlineData(4L, 2L, true)]
-    public void The_ledger_moves_aside_only_when_the_next_line_would_pass_the_cap(long current, long line, bool rotates)
+    public void The_ledger_moves_aside_only_when_the_next_batch_would_pass_the_cap(long current, long batch, bool rotates)
     {
-        Assert.Equal(rotates, LedgerRotation.ShouldRotate(current, line, maxBytes: 5));
+        Assert.Equal(rotates, LedgerRotation.ShouldRotate(current, batch, maxBytes: 5));
     }
 
     [Fact]
     public void The_cap_is_five_megabytes()
     {
         Assert.Equal(5L * 1024 * 1024, LedgerRotation.MaxBytes);
+    }
+
+    // Walking is most of what characters do; sampling it would cost every move and write lines nobody reads.
+    [Fact]
+    public void Walking_is_left_out_of_the_ledger_and_every_other_kind_is_kept()
+    {
+        Assert.Equal(7, LedgerActions.MoveActionType);
+        Assert.False(LedgerActions.IsLogged(LedgerActions.MoveActionType));
+        Assert.True(LedgerActions.IsLogged(1));
+        Assert.True(LedgerActions.IsLogged(10));
+    }
+
+    // Character ids repeat across saves; an action open when the save is left must not end in the next one.
+    [Fact]
+    public void Loading_another_save_drops_every_open_action()
+    {
+        var book = new LedgerBook();
+
+        book.EnterWorld(1);
+        book.Start(Alice, Started(Eat, 0));
+        book.Start(Bob, Started(Sleep, 0));
+
+        Assert.Equal(2, book.EnterWorld(2));
+        Assert.Null(book.OpenActionOf(Alice));
+        Assert.Null(book.End(Bob, Sleep, At(5), isCancelled: false));
+    }
+
+    [Fact]
+    public void Going_back_to_the_title_screen_drops_every_open_action()
+    {
+        var book = new LedgerBook();
+
+        book.EnterWorld(1);
+        book.Start(Alice, Started(Eat, 0));
+
+        Assert.Equal(1, book.EnterWorld(null));
+        Assert.Null(book.OpenActionOf(Alice));
+    }
+
+    [Fact]
+    public void Staying_in_the_same_save_keeps_the_open_actions()
+    {
+        var book = new LedgerBook();
+
+        book.EnterWorld(1);
+        book.Start(Alice, Started(Eat, 0));
+
+        Assert.Equal(0, book.EnterWorld(1));
+        Assert.Equal(Eat, book.OpenActionOf(Alice));
     }
 }
