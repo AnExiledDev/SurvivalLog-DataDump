@@ -117,7 +117,7 @@ internal static class UiState
     private static ClickDoc Clicks(ProblemList problems)
     {
         var camera = problems.Object("the camera", () => GameSingleton.Existing<BattleShowWorld>()?._CameraManager);
-        var isRaycastTarget = problems.MaybeValue("world clicks", () =>
+        var isRaycastTarget = problems.MaybeValue<bool>("world clicks", () =>
         {
             var touch = CameraTouch.Instance;
             var image = touch == null ? null : touch.GetComponent<Image>();

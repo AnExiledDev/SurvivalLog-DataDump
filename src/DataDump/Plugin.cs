@@ -18,9 +18,9 @@ public sealed class Plugin : BasePlugin
         var isEnabled = Config.Bind("General", "Enabled", true,
             "Write the game's data tables, its text in both languages and its key bindings to BepInEx/data-dump once the game has loaded. Off: this tool does nothing at all. Default: on.\n" +
             "游戏载入完成后，把游戏的数据表、中英文文本和按键设置写入 BepInEx/data-dump 文件夹。关闭后，这个工具什么都不做。默认开启。").Value;
-        var dumpKey = Config.Bind("General", "DumpKey", KeyCode.F11,
-            "Hold Ctrl and press this key to write the data tables and the mod health again. Default: F11 (Ctrl+F11).\n" +
-            "按住 Ctrl 再按这个键，重新写入数据表和模组状态。默认 F11，即 Ctrl+F11。").Value;
+        var dumpKey = Config.Bind("General", "DumpKey", KeyCode.F5,
+            "Hold Ctrl and press this key to write the data tables and the mod health again. Default: F5 (Ctrl+F5).\n" +
+            "按住 Ctrl 再按这个键，重新写入数据表和模组状态。默认 F5，即 Ctrl+F5。").Value;
         var snapshotKey = Config.Bind("Snapshot", "Key", KeyCode.F10,
             "Hold Ctrl and press this key to save a bug snapshot to BepInEx/data-dump/snapshots: a screenshot, the game state, the open pages, the logs and the mod health. Default: F10 (Ctrl+F10).\n" +
             "按住 Ctrl 再按这个键，把一份问题快照保存到 BepInEx/data-dump/snapshots 文件夹：截图、游戏状态、打开的页面、日志和模组状态。默认 F10，即 Ctrl+F10。").Value;
