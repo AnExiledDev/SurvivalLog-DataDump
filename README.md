@@ -27,7 +27,7 @@ A table keyed by something other than a single id (`_Config_DailyWeather_DayHour
 ## When it runs, and how to dump again
 
 - **Once per launch**, a couple of seconds after the game has finished loading its configs. The work is spread over frames, a few milliseconds each, so the game does not hitch.
-- **Ctrl+F11** dumps the tables again and rewrites the mod health. Use it after changing the language, a key binding, or anything a mod rewrites at runtime.
+- **Ctrl+F5** dumps the tables again and rewrites the mod health. Use it after changing the language, a key binding, or anything a mod rewrites at runtime.
 
 Each file is written beside its final name and moved into place when it is complete, so a half-written file never looks whole.
 
@@ -73,7 +73,7 @@ The attribute changes are the whole difference between the start and the end. Th
 - every method patched through Harmony, with each owner's prefixes, postfixes, transpilers and finalizers;
 - a "shared" list of methods patched by more than one owner. These are the places two mods can clash, third-party mods included.
 
-They are written 30 seconds after the game has loaded, with every snapshot, and on Ctrl+F11.
+They are written 30 seconds after the game has loaded, with every snapshot, and on Ctrl+F5.
 
 ## Keys and config
 
@@ -82,14 +82,14 @@ Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`.
 | Section | Key | Default | What it does |
 | --- | --- | --- | --- |
 | `General` | `Enabled` | `true` | Off: the plugin does nothing at all. |
-| `General` | `DumpKey` | `F11` | Ctrl plus this key dumps again. |
+| `General` | `DumpKey` | `F5` | Ctrl plus this key dumps again. |
 | `Snapshot` | `Key` | `F10` | Ctrl plus this key saves a bug snapshot. |
 | `Ledger` | `Enabled` | `true` | Writes the action ledger. |
 
-Key clashes with the other mods in this collection:
+Other keys nearby:
 
-- WebUI Doctor uses Ctrl+F11 for its page check, so one press runs both. Change `DumpKey` if that gets in the way.
-- Camera keeps F10 and F11 out of the keys it lets you bind, so they stay free for this.
+- The other mods in this collection use F6 to F9, and WebUI Doctor uses Ctrl+F11 and Ctrl+F12. F5 and F10 are free of them. Camera keeps F10 out of the keys it lets you bind.
+- The game lets you bind F keys in its own key settings. If you bind F5 or F10 to a game action there, that action may run on the same press.
 
 ## Planned
 

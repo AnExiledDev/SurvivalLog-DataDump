@@ -82,7 +82,7 @@ internal static class GameState
     private static WorldDoc World(BattleLogicWorld world, GameTimeManager? time, ProblemList problems)
     {
         var isWorldPaused = problems.Value("world pause", () => world.IsPause);
-        var isCameraPaused = problems.MaybeValue("camera pause", () => GameSingleton.Existing<BattleShowWorld>()?._CameraManager?.isTimePaused);
+        var isCameraPaused = problems.MaybeValue<bool>("camera pause", () => GameSingleton.Existing<BattleShowWorld>()?._CameraManager?.isTimePaused);
 
         if (time is null)
         {
