@@ -35,6 +35,13 @@ internal static class PatchKit
             if (!ReportedFailures.Add(doing)) return;
         }
 
-        Log($"failed {doing} (reported once): {ex}");
+        try
+        {
+            Log($"failed {doing} (reported once): {ex}");
+        }
+        catch (Exception)
+        {
+            // Fail runs inside the game's own calls; a logger that throws must not carry the exception into them.
+        }
     }
 }

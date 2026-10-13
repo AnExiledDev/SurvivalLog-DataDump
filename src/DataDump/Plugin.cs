@@ -39,7 +39,7 @@ public sealed class Plugin : BasePlugin
         PatchKit.Log = log.Write;
         DumpTicker.Log = log.Write;
 
-        if (isLedgerOn) ActionLedger.Apply(new Harmony(Guid), folder, log.Write);
+        if (isLedgerOn && ActionLedger.Apply(new Harmony(Guid), folder, log.Write)) DumpTicker.Checks.Add(ActionLedger.Tick);
 
         var health = new ModHealthProbe(log.Write);
         var session = new DumpSession(

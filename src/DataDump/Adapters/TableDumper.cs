@@ -265,7 +265,19 @@ internal sealed class TableDumper
         _run = null;
 
         var input = new ManifestInput(_plugin, GameVersion(), run.Trigger, run.StartedAt, DateTimeOffset.Now, run.Language, run.Tables, run.Files);
-        var manifest = Manifest.Build(input);
+        Manifest.Document manifest;
+
+        try
+        {
+            manifest = Manifest.Build(input);
+        }
+        catch (Exception ex)
+        {
+            run.Files.Add(new DumpFailed(ManifestFile, "could not be built: " + ProblemList.Reason(ex)));
+            _log($"dump ({run.Trigger}) done without {ManifestFile}; failed: {FailureList(run)}");
+
+            return;
+        }
 
         try
         {
@@ -282,6 +294,10 @@ internal sealed class TableDumper
         _log($"dump ({run.Trigger}) done in {manifest.Seconds} s: {manifest.TableCount} tables, {manifest.RowCount} rows, " +
              $"{manifest.Failed.Count} failed, {manifest.Skipped.Count} skipped (see {ManifestFile})");
     }
+
+    /// <summary>Every failure of the run as "name: reason", for the log when there is no manifest to hold them.</summary>
+    private static string FailureList(Run run) =>
+        string.Join("; ", run.Tables.Concat(run.Files).OfType<DumpFailed>().Select(failed => failed.Name + ": " + failed.Reason));
 
     private static string? GameVersion()
     {

@@ -64,6 +64,8 @@ Only the 50 newest snapshots are kept. A line in `data-dump.log` says where each
 
 The attribute changes are the whole difference between the start and the end. They include anything else that happened during the action, such as hunger ticking down, a buff running out, or damage taken. Compare like with like: the same action at the same time of day, with and without a speed mod.
 
+Walking is left out. Lines are written in batches, at most every 5 seconds, so the lines of the last few seconds before the game closes may be missing. Actions still running when you load another save or go back to the title screen get no line. While the file is open in a program that locks it (Excel does), up to 10,000 lines wait and are written once it is closed. Once a minute, `data-dump.log` gets a line with what the ledger cost the game: how many calls, the longest and the total, in milliseconds.
+
 ## Mod health
 
 `mod-health.json` and the readable `mod-health.txt` list:
