@@ -1,6 +1,6 @@
 # Data Dump
 
-**A developer tool, not a player mod.** It is never published. It writes the data Survival Log loads at startup, and bug snapshots on request, to plain files that are easy to search.
+**A developer tool, not a player mod.** The source is public, but it is not released on Nexus. It writes the data Survival Log loads at startup, and bug snapshots on request, to plain files that are easy to search.
 
 The game's code can be read in a disassembler, but the data it loads cannot: item stack limits, action durations, payout intervals, interest rates, the Chinese and English text, and the default key bindings. This plugin writes all of it out once per launch.
 
