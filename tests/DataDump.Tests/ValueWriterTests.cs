@@ -32,6 +32,16 @@ public class ValueWriterTests
         Assert.Equal("{\"Output\":42}", Write(row));
     }
 
+    // A map file is read alone, so the rows it holds (its spots and areas) must be written out, not left as ids.
+    [Fact]
+    public void A_nested_object_with_an_id_is_written_out_when_asked()
+    {
+        var item = new FakeObject("Config_Item", 42).With("Name", "Apple");
+        var row = new FakeObject("Config_Recipe").With("Output", item);
+
+        Assert.Equal("{\"Output\":{\"Name\":\"Apple\"}}", new ValueWriter(new FakeValueReader(), 4, isNestedIdOnly: false).Write(row));
+    }
+
     [Fact]
     public void A_nested_object_without_an_id_is_written_out()
     {

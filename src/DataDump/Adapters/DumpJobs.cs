@@ -160,3 +160,73 @@ internal sealed class InputJob : DumpJob
         yield return true;
     }
 }
+
+/// <summary>
+/// enums.json: every enum the game's code declares, from the interop assemblies by reflection. Config fields hold plain
+/// numbers, and this names them. A type that cannot be read is left out and counted in the log, not the whole file.
+/// </summary>
+internal sealed class EnumJob : DumpJob
+{
+    private static readonly string[] GameAssemblies = { "HotUpdate", "AOT" };
+
+    private readonly Action<string> _log;
+
+    public EnumJob(Action<string> log) : base("enums", "enums.json", isTable: false) => _log = log;
+
+    public override IEnumerable<bool> Steps(TextWriter writer)
+    {
+        var types = new List<EnumType>();
+        var unreadable = 0;
+
+        foreach (var type in GameEnums())
+        {
+            if (Read(type) is { } read) types.Add(read);
+            else unreadable++;
+        }
+
+        writer.Write(EnumBook.ToJson(types));
+        Count = types.Count;
+
+        if (unreadable > 0) _log($"enums: {unreadable} enum types could not be read and are not in enums.json");
+
+        yield return true;
+    }
+
+    /// <summary>The game's own code: HotUpdate (gameplay, where ConfigManager lives) and AOT (startup).</summary>
+    private static IEnumerable<Type> GameEnums() =>
+        AppDomain.CurrentDomain.GetAssemblies()
+            .Where(assembly => assembly.GetName().Name is { } name && GameAssemblies.Contains(name))
+            .SelectMany(LoadableTypes)
+            .Where(type => type.IsEnum && type.FullName is not null);
+
+    private static IEnumerable<Type> LoadableTypes(System.Reflection.Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (System.Reflection.ReflectionTypeLoadException ex)
+        {
+            return ex.Types.Where(type => type is not null).Cast<Type>();
+        }
+    }
+
+    private static EnumType? Read(Type type)
+    {
+        try
+        {
+            var values = Enum.GetValues(type).Cast<object>()
+                .Select(value => new KeyValuePair<long, string>(NumberOf(value), value.ToString() ?? ""))
+                .ToList();
+
+            return new EnumType(type.FullName ?? type.Name, values);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A ulong enum past long's range keeps its bits; every other enum fits a long as it is.</summary>
+    private static long NumberOf(object value) => value is ulong large ? unchecked((long)large) : Convert.ToInt64(value);
+}

@@ -106,6 +106,7 @@ internal sealed class TableDumper
         jobs.Enqueue(new LanguageJob("lang-zh", () => configs.customCache?.ChineseLanguageMap));
         jobs.Enqueue(new LanguageJob("lang-en", () => configs.customCache?.EnglishLanguageMap));
         jobs.Enqueue(new InputJob());
+        jobs.Enqueue(new EnumJob(_log));
 
         _run = new Run(trigger, DateTimeOffset.Now, LanguageOf(configs), jobs, tables);
         _log($"dump ({trigger}) started: {jobs.Count(job => job.IsTable)} tables to {_folder}");

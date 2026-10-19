@@ -9,7 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <GameDir Condition="'$(GameDir)' == ''">D:\Downloads\Survival-Log-AnkerGames\Survival Log</GameDir>
+    <GameDir Condition="'$(GameDir)' == ''">D:\Games\Survival Log\Survival Log</GameDir>
     <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
     <Interop>$(GameDir)\BepInEx\interop</Interop>
     <ToolkitDll Condition="'$(ToolkitDll)' == ''">D:\devnew\game-mods\SurvivalLog\mods\sl-exiled-toolkit\src\ExiledToolkit\bin\Release\ExiledToolkit.dll</ToolkitDll>
@@ -31,13 +31,14 @@
     <Reference Include="$(Interop)\UnityEngine.UI.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.InputLegacyModule.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.ScreenCaptureModule.dll" Private="false" />
+    <Reference Include="$(Interop)\UnityEngine.ImageConversionModule.dll" Private="false" />
     <Reference Include="$(ToolkitDll)" Private="false" />
   </ItemGroup>
 
   <!-- What the Mod Manager's Mods screen shows about this mod. -->
   <ItemGroup>
     <AssemblyMetadata Include="ModManager.Name" Value="Data Dump&#10;数据导出" />
-    <AssemblyMetadata Include="ModManager.Description" Value="A developer tool: writes the game's data tables, its text in both languages and its key bindings to plain files once the game has loaded, and saves a bug snapshot on Ctrl+F10.&#10;开发者工具：游戏载入后把数据表、中英文文本和按键设置写成普通文件，按 Ctrl+F10 保存问题快照。" />
+    <AssemblyMetadata Include="ModManager.Description" Value="A developer tool: writes the game's data tables, its text in both languages and its key bindings to plain files once the game has loaded, records each location's map data and pictures and every loot roll, and saves a bug snapshot on Ctrl+F10.&#10;开发者工具：游戏载入后把数据表、中英文文本和按键设置写成普通文件，记录每个地点的地图数据和图片以及每次掉落抽取，按 Ctrl+F10 保存问题快照。" />
     <AssemblyMetadata Include="ModManager.Author" Value="AnExiledDev" />
     <AssemblyMetadata Include="ModManager.Category" Value="Tools" />
     <AssemblyMetadata Include="ModManager.GameVersion" Value="1.1.18902" />

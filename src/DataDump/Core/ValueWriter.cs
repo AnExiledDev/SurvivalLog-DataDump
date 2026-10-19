@@ -20,13 +20,19 @@ public sealed class ValueWriter
     private readonly IValueReader _reader;
     private readonly int _maxDepth;
     private readonly bool _isIndented;
+    private readonly bool _isNestedIdOnly;
 
     /// <param name="isIndented">One member per line, for files people read; false keeps a value on one line.</param>
-    public ValueWriter(IValueReader reader, int maxDepth, bool isIndented = false)
+    /// <param name="isNestedIdOnly">
+    /// A nested object with an id is written as that id, which keeps a table row on one line. False writes it whole,
+    /// for files whose nested objects are not rows of a table that is dumped anyway.
+    /// </param>
+    public ValueWriter(IValueReader reader, int maxDepth, bool isIndented = false, bool isNestedIdOnly = true)
     {
         _reader = reader;
         _maxDepth = maxDepth;
         _isIndented = isIndented;
+        _isNestedIdOnly = isNestedIdOnly;
     }
 
     public string Write(object? value)
@@ -161,7 +167,7 @@ public sealed class ValueWriter
 
     private void AppendRecord(StringBuilder text, RecordView record, int depth)
     {
-        if (depth > 0 && record.Id is not null)
+        if (_isNestedIdOnly && depth > 0 && record.Id is not null)
         {
             AppendLeaf(text, record.Id);
 

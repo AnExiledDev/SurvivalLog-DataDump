@@ -17,7 +17,13 @@ Everything goes to `BepInEx/data-dump/` in the game folder.
 | `input.json` | Each hotkey action with its default key and the key it is bound to now. |
 | `manifest.json` | The game version, when the dump ran and why, the current language, each table's row count, and every table or file that was skipped or failed, with the reason. |
 | `mod-health.json`, `mod-health.txt` | See [Mod health](#mod-health). |
+| `enums.json` | Every enum in the game's code, value to name. Config fields hold plain numbers; this names them. |
+| `maps/<location>.json` | See [Maps](#maps). |
+| `maps/<location>/` | See [Maps](#maps). |
+| `npc-dialogue/<key>.json` | The NPC dialogue the game had loaded when a location was written. |
 | `action-ledger.tsv` | See [Action ledger](#action-ledger). |
+| `loot-ledger.tsv` | See [Loot ledger](#loot-ledger). |
+| `bundles/` | See [Asset bundles](#asset-bundles). Off by default. |
 | `snapshots/<yyyyMMdd-HHmmss>/` | See [Bug snapshots](#bug-snapshots). |
 
 The plugin's own log is `BepInEx/data-dump.log`. It is kept across launches and trimmed when it passes 1 MB.
@@ -44,6 +50,36 @@ Press **Ctrl+F10** when something looks wrong. A folder `snapshots/<yyyyMMdd-HHm
 - `mod-health.json`, `mod-health.txt`: the mod health at that moment. The copy in `data-dump/` is refreshed too.
 
 Only the 50 newest snapshots are kept. A line in `data-dump.log` says where each one went. A second press while the last snapshot is still waiting for its page HTML is refused with a log line.
+
+## Maps
+
+The game loads one location at a time: the home, before or after the disaster, or an expedition. The first frame a new location is there, `maps/<location>.json` gets its map data: every furniture spot, building slot, package spot and camera area, each with its world position and rotation, plus the scene name.
+
+A few seconds later, once per location per game session, the plugin takes top-down pictures of it into `maps/<location>/`. **Ctrl+F4** takes them again for the current location. Each camera area gets two:
+
+- `<area>.plan.png` looks down from a little above the floor (2.2 m by default), so ceilings and upper floors are cut away and the rooms show.
+- `<area>.top.png` looks down from high above, roofs and all.
+
+Each picture has a `.json` beside it with the frame: the world box it covers, the floor height and the pixels per meter. A position lands on the picture at `x = (X - MinX) * PixelsPerMeter` from the left and `y = (MaxZ - Z) * PixelsPerMeter` from the top. The game may stop for a moment while a picture is taken; one is taken per frame.
+
+## Loot ledger
+
+`loot-ledger.tsv` gets one line every time the game rolls a loot group: furniture loot, reward sets, stranger trades and the like. Tab-separated, with a header line.
+
+| Column | Meaning |
+| --- | --- |
+| `time` | The computer's clock. |
+| `map` | The location loaded at the time. |
+| `group` | The `Config_RandomGroup` id. |
+| `count` | How many picks were asked for. |
+| `discover_lv`, `guarantee_lv` | The discovery and guarantee levels it rolled at. |
+| `items` | The item ids it gave, comma-separated. |
+
+Lines are written every 5 seconds, so the last few before the game closes may be missing. Up to 10,000 wait while the file is locked by another program.
+
+## Asset bundles
+
+With `Bundles.Export` on, the plugin writes the game's asset bundles at game start, decrypted, to `bundles/<name>.bundle`, where asset tools such as AssetRipper can open them. It runs beside the game and logs when it is done. All of them take about 4 GB; `Bundles.Filter` limits it to names containing one of its words. A bundle already written at its full size is skipped.
 
 ## Action ledger
 
@@ -79,7 +115,7 @@ They are written 30 seconds after the game has loaded, with every snapshot, and 
 
 ## Keys and config
 
-Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The two keys can also be changed in game on the Mod Manager's Mods screen, where they take effect at once; the two `Enabled` settings take effect at the next game start.
+Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The three keys can also be changed in game on the Mod Manager's Mods screen, where they take effect at once; the other settings take effect at the next game start.
 
 | Section | Key | Default | What it does |
 | --- | --- | --- | --- |
@@ -87,11 +123,19 @@ Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The two keys can
 | `General` | `DumpKey` | `F5` | Ctrl plus this key dumps again. |
 | `Snapshot` | `Key` | `F10` | Ctrl plus this key saves a bug snapshot. |
 | `Ledger` | `Enabled` | `true` | Writes the action ledger. |
+| `Maps` | `Enabled` | `true` | Writes each location's map data and the NPC dialogue. Also needed for the pictures. |
+| `Maps` | `AutoPictures` | `true` | Takes each location's pictures once per session, a few seconds after it loads. |
+| `Maps` | `PictureKey` | `F4` | Ctrl plus this key takes the current location's pictures. |
+| `Maps` | `PixelsPerMeter` | `16` | Picture scale. A large location is made smaller so a picture is at most 4096 pixels across. |
+| `Maps` | `CutHeight` | `2.2` | How far above the floor the plan pictures start, in meters. |
+| `Loot` | `Enabled` | `true` | Writes the loot ledger. |
+| `Bundles` | `Export` | `false` | Writes the decrypted asset bundles at game start. |
+| `Bundles` | `Filter` | empty | Only bundles whose name contains one of these comma-separated words. Empty: all. |
 
 Other keys nearby:
 
-- The other mods in this collection use F6 to F9, and WebUI Doctor uses Ctrl+F11 and Ctrl+F12. F5 and F10 are free of them. Camera keeps F10 out of the keys it lets you bind.
-- The game lets you bind F keys in its own key settings. If you bind F5 or F10 to a game action there, that action may run on the same press.
+- The other mods in this collection use F6 to F9, and WebUI Doctor uses Ctrl+F11 and Ctrl+F12. F4, F5 and F10 are free of them. The game binds F1 to F3 to its floor views. Camera keeps F10 out of the keys it lets you bind.
+- The game lets you bind F keys in its own key settings. If you bind F4, F5 or F10 to a game action there, that action may run on the same press.
 
 ## Contact
 
