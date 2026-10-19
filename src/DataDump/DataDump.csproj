@@ -32,6 +32,7 @@
     <Reference Include="$(Interop)\UnityEngine.InputLegacyModule.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.ScreenCaptureModule.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.ImageConversionModule.dll" Private="false" />
+    <Reference Include="$(Interop)\UnityEngine.DirectorModule.dll" Private="false" />
     <Reference Include="$(ToolkitDll)" Private="false" />
   </ItemGroup>
 

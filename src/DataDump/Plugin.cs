@@ -13,7 +13,7 @@ namespace DataDump;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.datadump";
-    private const string Version = "0.3.1";
+    private const string Version = "0.3.2";
 
     public override void Load()
     {
@@ -36,14 +36,17 @@ public sealed class Plugin : BasePlugin
             "Write each location's map data (every furniture spot, building slot and camera area, with its position) to BepInEx/data-dump/maps when the game loads it, and the NPC dialogue loaded there to BepInEx/data-dump/npc-dialogue. Also needed for the map pictures. Default: on. Takes effect at the next game start.\n" +
             "游戏载入每个地点时，把该地点的地图数据（每个家具位、建筑位和镜头区域及其位置）写入 BepInEx/data-dump/maps 文件夹，并把那里载入的 NPC 对话写入 BepInEx/data-dump/npc-dialogue 文件夹。地图图片也需要它。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
         var isAutoPictures = Config.Bind("Maps", "AutoPictures", true, new ConfigDescription(
-            "Take top-down pictures of each place the game shows (each home floor, each store) once per game session, after the view has stayed on it for 5 seconds, to BepInEx/data-dump/maps/<location>. The game only draws the place you are at and the floor you are viewing, so visit each place and switch to each floor to get them all. A black picture is not saved and is tried again a little later. The game may stop for a moment while they are taken. Default: on. Takes effect at the next game start.\n" +
-            "每次启动游戏后，游戏显示的每个地方（家里的每一层、每家商店）在镜头停留 5 秒后自动拍一次俯视图片，存到 BepInEx/data-dump/maps/<地点> 文件夹。游戏只绘制你所在的地方和正在查看的楼层，所以要拍全，请走到每个地方并切换到每一层。全黑的图片不会保存，稍后会再试。拍摄时游戏可能会停顿片刻。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
+            "Take top-down pictures of each place the game shows (each home floor, each store) once per game session, after the view has stayed on it for 10 seconds, to BepInEx/data-dump/maps/<location>. The game only draws the place you are at and the floor you are viewing, so visit each place and switch to each floor to get them all. A black picture is not saved and is tried again a little later. The game may stop for a moment while they are taken. Default: on. Takes effect at the next game start.\n" +
+            "每次启动游戏后，游戏显示的每个地方（家里的每一层、每家商店）在镜头停留 10 秒后自动拍一次俯视图片，存到 BepInEx/data-dump/maps/<地点> 文件夹。游戏只绘制你所在的地方和正在查看的楼层，所以要拍全，请走到每个地方并切换到每一层。全黑的图片不会保存，稍后会再试。拍摄时游戏可能会停顿片刻。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
         var pictureKey = Config.Bind("Maps", "PictureKey", KeyCode.F4,
             "Hold Ctrl and press this key to take top-down pictures of the place and floor on view now, replacing its earlier ones. Default: F4 (Ctrl+F4).\n" +
             "按住 Ctrl 再按这个键，立即给当前显示的地方和楼层拍俯视图片，替换之前的图片。默认 F4，即 Ctrl+F4。");
-        var pixelsPerMeter = Config.Bind("Maps", "PixelsPerMeter", 40f, new ConfigDescription(
-            "How many pixels a meter of the game world gets in the map pictures. A large location is made smaller so its picture is at most 4096 pixels wide. Default: 40. Takes effect at the next game start.\n" +
-            "地图图片里游戏世界每米占多少像素。较大的地点会缩小，使图片最宽 4096 像素。默认 40。下次启动游戏时生效。", new AcceptableValueRange<float>(2f, 64f), "ModManager.Restart")).Value;
+        var pixelsPerMeter = Config.Bind("Maps", "PixelsPerMeter", 120f, new ConfigDescription(
+            "How many pixels a meter of the game world gets in the map pictures. A large location is made smaller so its picture is at most 8192 pixels wide. Higher values make sharper pictures and a longer stop while they are taken. Default: 120. Takes effect at the next game start.\n" +
+            "地图图片里游戏世界每米占多少像素。较大的地点会缩小，使图片最宽 8192 像素。数值越高，图片越清晰，拍摄时的停顿也越长。默认 120。下次启动游戏时生效。", new AcceptableValueRange<float>(2f, 200f), "ModManager.Restart")).Value;
+        var isDaylight = Config.Bind("Maps", "Daylight", true, new ConfigDescription(
+            "Switch the game's light to midday while the map pictures are taken, then back, so pictures taken at night are not dark. If the game does not allow it, the pictures use the light there is. Default: on. Takes effect at the next game start.\n" +
+            "拍地图图片时把游戏光照切换到正午，拍完再切回，这样夜里拍的图片也不会很暗。如果游戏不允许切换，就用当时的光照拍。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
         var cutHeight = Config.Bind("Maps", "CutHeight", 2.2f, new ConfigDescription(
             "For the plan pictures: how many meters above the floor the view starts, so ceilings and upper floors are cut away and the rooms show. The top pictures show roofs and all. Default: 2.2. Takes effect at the next game start.\n" +
             "平面图片的视角从地面以上多少米开始，这样天花板和楼上会被切掉，能看到房间。俯视图片则包含屋顶。默认 2.2。下次启动游戏时生效。", new AcceptableValueRange<float>(0.5f, 10f), "ModManager.Restart")).Value;
@@ -62,7 +65,7 @@ public sealed class Plugin : BasePlugin
 
         log.TrimIfLarge();
         log.Write($"===== Data Dump {Version} started, enabled {isEnabled}, dump key Ctrl+{dumpKey.Value}, snapshot key Ctrl+{snapshotKey.Value}, action ledger {isLedgerOn}, " +
-                  $"maps {areMapsOn} (auto pictures {isAutoPictures}, picture key Ctrl+{pictureKey.Value}), loot ledger {isLootLedgerOn}, bundle export {isBundleExportOn}");
+                  $"maps {areMapsOn} (auto pictures {isAutoPictures}, daylight {isDaylight}, picture key Ctrl+{pictureKey.Value}), loot ledger {isLootLedgerOn}, bundle export {isBundleExportOn}");
 
         if (!isEnabled) return;
 
@@ -74,7 +77,7 @@ public sealed class Plugin : BasePlugin
         if (isLedgerOn && ActionLedger.Apply(harmony, folder, log.Write)) DumpTicker.Checks.Add(ActionLedger.Tick);
         if (isLootLedgerOn && LootLedger.Apply(harmony, folder, log.Write)) DumpTicker.Checks.Add(LootLedger.Tick);
         if (isBundleExportOn) BundleExport.Start(Paths.GameDataPath, folder, bundleFilter, log.Write);
-        if (areMapsOn) WatchMaps(folder, isAutoPictures, pictureKey, pixelsPerMeter, cutHeight, log);
+        if (areMapsOn) WatchMaps(folder, isAutoPictures, isDaylight, pictureKey, pixelsPerMeter, cutHeight, log);
 
         var health = new ModHealthProbe(log.Write);
         var dumpHotkey = new CtrlHotkey(dumpKey.Value, log.Write);
@@ -100,10 +103,10 @@ public sealed class Plugin : BasePlugin
     }
 
     /// <summary>Map data on each location load, and the map pictures on their key and once per place on view.</summary>
-    private static void WatchMaps(string folder, bool isAutoPictures, ConfigEntry<KeyCode> pictureKey, float pixelsPerMeter, float cutHeight, DumpLog log)
+    private static void WatchMaps(string folder, bool isAutoPictures, bool isDaylight, ConfigEntry<KeyCode> pictureKey, float pixelsPerMeter, float cutHeight, DumpLog log)
     {
         var pictureHotkey = new CtrlHotkey(pictureKey.Value, log.Write);
-        var capture = new MapCapture(Path.Combine(folder, MapWatcher.MapsFolder), pixelsPerMeter, cutHeight, isAutoPictures, pictureHotkey, log.Write);
+        var capture = new MapCapture(Path.Combine(folder, MapWatcher.MapsFolder), pixelsPerMeter, cutHeight, isAutoPictures, pictureHotkey, new Daylight(isDaylight, log.Write), log.Write);
         var watcher = new MapWatcher(folder, log.Write);
 
         WatchKey(pictureKey, pictureHotkey, "map picture key", log);

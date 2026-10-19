@@ -55,14 +55,18 @@ Only the 50 newest snapshots are kept. A line in `data-dump.log` says where each
 
 The game loads one location at a time: the home, before or after the disaster, or an expedition. The first frame a new location is there, `maps/<location>.json` gets its map data: every furniture spot, building slot, package spot and camera area, each with its world position and rotation, plus the scene name.
 
-The plugin also takes top-down pictures into `maps/<location>/`, of the place the game shows. The game only draws the part of a location you are at (your home, or the one store you walked into) and only the floor you are viewing, so a picture of anything else would be black. Once the view has stayed on a place for 5 seconds, its pictures are taken, once per game session. To get them all, walk into each store, and in a home switch to each floor with the game's floor views (F1 to F3) and wait a few seconds on each. **Ctrl+F4** retakes the place and floor on view now. Each place gets two:
+The plugin also takes top-down pictures into `maps/<location>/`, of the place the game shows. The game only draws the part of a location you are at (your home, or the one store you walked into) and only the floor you are viewing, so a picture of anything else would be black. Once the view has stayed on a place for 10 seconds, its pictures are taken, once per game session. To get them all, walk into each store, and in a home switch to each floor with the game's floor views (F1 to F3) and wait about 10 seconds on each. **Ctrl+F4** retakes the place and floor on view now. Each place gets two:
 
 - `<area>.plan.png` looks down from a little above the floor (2.2 m by default), so ceilings and upper floors are cut away and the rooms show.
 - `<area>.top.png` looks down from high above, roofs and all.
 
+The game already hides the roof of the building you are in, so the two differ mostly outside it: the plan picture also leaves out trees and the roofs of the buildings next door.
+
+While the pictures are taken, the game's light is switched to midday and then back (`Daylight`), so a place visited at night still comes out lit. A building that stands at an angle (the Tool Store and the Small Market stand at 15 degrees) is pictured turned to its angle, so it lies square in the picture and none of it is cut off. The angle is the one most of the place's furniture stands at.
+
 A home floor adds `.floor<id>` to the name: `Home.floor102.plan.png` is the second floor and `floor101` the basement. A picture that comes out black (the place was not drawn yet, or a menu was open) is not saved and is tried again 10 seconds later, up to 3 times; the log says when a place gave up.
 
-Each picture has a `.json` beside it with the frame: the world box it covers, the floor and its height, and the pixels per meter. A position lands on the picture at `x = (X - MinX) * PixelsPerMeter` from the left and `y = (MaxZ - Z) * PixelsPerMeter` from the top. The game may stop for a moment while a picture is taken.
+Each picture has a `.json` beside it with the frame: its turn `Yaw` in degrees, the box it covers in turned meters (`MinU` to `MaxU`, `MinV` to `MaxV`), the floor and its height, and the pixels per meter. A world position X, Z turns into `U = X cos(Yaw) - Z sin(Yaw)` and `V = X sin(Yaw) + Z cos(Yaw)`, and lands on the picture at `x = (U - MinU) * PixelsPerMeter` from the left and `y = (MaxV - V) * PixelsPerMeter` from the top. With `Yaw` 0, U is X and V is Z. Large pictures are rendered in pieces and joined. The game stops for a few seconds while a large picture is taken.
 
 ## Loot ledger
 
@@ -126,9 +130,10 @@ Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The three keys c
 | `Snapshot` | `Key` | `F10` | Ctrl plus this key saves a bug snapshot. |
 | `Ledger` | `Enabled` | `true` | Writes the action ledger. |
 | `Maps` | `Enabled` | `true` | Writes each location's map data and the NPC dialogue. Also needed for the pictures. |
-| `Maps` | `AutoPictures` | `true` | Takes the pictures of each place and floor on view once per session, after the view stays on it 5 seconds. |
+| `Maps` | `AutoPictures` | `true` | Takes the pictures of each place and floor on view once per session, after the view stays on it 10 seconds. |
 | `Maps` | `PictureKey` | `F4` | Ctrl plus this key retakes the pictures of the place and floor on view. |
-| `Maps` | `PixelsPerMeter` | `40` | Picture scale. A large location is made smaller so a picture is at most 4096 pixels across. |
+| `Maps` | `PixelsPerMeter` | `120` | Picture scale. A large location is made smaller so a picture is at most 8192 pixels across. Higher is sharper and stops the game longer. |
+| `Maps` | `Daylight` | `true` | Switches the game's light to midday while pictures are taken, then back. |
 | `Maps` | `CutHeight` | `2.2` | How far above the floor the plan pictures start, in meters. |
 | `Loot` | `Enabled` | `true` | Writes the loot ledger. |
 | `Bundles` | `Export` | `false` | Writes the decrypted asset bundles at game start. |

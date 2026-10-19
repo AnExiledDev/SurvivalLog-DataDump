@@ -39,6 +39,15 @@ public class MapShotsTests
         Assert.Equal(4 + MapShots.TopHeight, top.CameraY);
     }
 
+    // A building standing at an angle is pictured square: both pictures are turned to the view's angle.
+    [Fact]
+    public void A_turned_view_gets_turned_pictures()
+    {
+        var view = View("Tool_Store", 0, 0) with { Yaw = 15 };
+
+        Assert.All(MapShots.For(view, 2.2f, 16, 4096), shot => Assert.Equal(15, shot.Frame.Yaw));
+    }
+
     [Fact]
     public void A_view_with_no_size_gets_no_pictures()
     {

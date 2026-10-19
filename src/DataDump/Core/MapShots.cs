@@ -29,8 +29,10 @@ public static class MapShots
     public static IReadOnlyList<MapShot> For(MapView view, float cutHeight, float pixelsPerMeter, int maxPixels)
     {
         var floor = view.FloorY;
+        var (min, max) = (view.Area.Min, view.Area.Max);
+        var corners = new[] { min, max, new WorldPoint(min.X, floor, max.Z), new WorldPoint(max.X, floor, min.Z) };
 
-        if (MapFrame.For(view.Area.Min, view.Area.Max, floor, pixelsPerMeter, maxPixels) is not { } frame) return new List<MapShot>();
+        if (MapFrame.For(corners, view.Yaw, floor, pixelsPerMeter, maxPixels) is not { } frame) return new List<MapShot>();
 
         return new List<MapShot>
         {

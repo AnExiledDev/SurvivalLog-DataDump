@@ -1,3 +1,4 @@
+using System.Linq;
 using DataDump.Core;
 using Xunit;
 
@@ -54,6 +55,52 @@ public class MapViewsTests
     }
 }
 
+public class MapYawTests
+{
+    private static readonly MapArea Store = new("Tool_Store", new WorldPoint(0, 0, 0), new WorldPoint(20, 3, 20));
+
+    private static (WorldPoint, float)[] Nodes(params float[] yaws) => yaws.Select((yaw, i) => (new WorldPoint(1 + i, 0, 1 + i), yaw)).ToArray();
+
+    // The Tool Store's shelves stand at 15 degrees, some turned a further quarter turn; the picture must turn with them.
+    [Fact]
+    public void A_place_built_at_an_angle_turns_to_its_furniture()
+    {
+        Assert.Equal(15, MapViews.YawOf(Store, Nodes(15, 105, -75, 15.4f, 0)), 0);
+    }
+
+    // Most of the game is built square, and a few crates set askew must not turn the whole picture.
+    [Fact]
+    public void A_square_place_with_a_few_askew_nodes_stays_square()
+    {
+        Assert.Equal(0, MapViews.YawOf(Store, Nodes(0, 90, 180, 0, 33, 12)));
+    }
+
+    [Fact]
+    public void Fewer_than_three_nodes_at_an_angle_do_not_turn_the_picture()
+    {
+        Assert.Equal(0, MapViews.YawOf(Store, Nodes(15, 15)));
+    }
+
+    // Nodes of the next building over stand outside the cover and must not set this one's angle.
+    [Fact]
+    public void Only_nodes_inside_the_place_count()
+    {
+        var outside = new[] { 30f, 30f, 30f }.Select(yaw => (new WorldPoint(50, 0, 50), yaw));
+
+        Assert.Equal(0, MapViews.YawOf(Store, outside));
+    }
+
+    [Theory]
+    [InlineData(105, 15)]
+    [InlineData(-75, 15)]
+    [InlineData(45, -45)]
+    [InlineData(-46, 44)]
+    public void An_angle_folds_into_a_quarter_turn(float yaw, float folded)
+    {
+        Assert.Equal(folded, MapViews.Fold(yaw), 3);
+    }
+}
+
 public class AutoViewsTests
 {
     // The game needs a moment after arriving to draw the place; a picture on the first frame would be empty.
@@ -75,8 +122,8 @@ public class AutoViewsTests
         auto.IsDue("Town/Home", 0);
         auto.IsDue("Town/Market", 4);
 
-        Assert.False(auto.IsDue("Town/Market", 6));
-        Assert.True(auto.IsDue("Town/Market", 9));
+        Assert.False(auto.IsDue("Town/Market", AutoViews.SettleSeconds + 1));
+        Assert.True(auto.IsDue("Town/Market", AutoViews.SettleSeconds + 4));
     }
 
     [Fact]

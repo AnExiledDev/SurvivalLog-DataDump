@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace DataDump.Core;
 
 /// <summary>
 /// What the game is showing right now: the camera area it keeps the view in and the floor it shows. The game only
 /// draws the area the player is at and only the floor being viewed, so a picture is only worth taking of this.
+/// <paramref name="Yaw"/> is the angle, in degrees, the place's building stands at, so its picture can be turned square.
 /// </summary>
-public sealed record MapView(string Location, MapArea Area, int FloorId, float FloorY)
+public sealed record MapView(string Location, MapArea Area, int FloorId, float FloorY, float Yaw = 0)
 {
     /// <summary>The picture's file name without its mode: the area, and the floor when the location has floors.</summary>
     public string Stem => FloorId > 0 ? FileNames.Safe(Area.Name) + ".floor" + FloorId : FileNames.Safe(Area.Name);
@@ -25,6 +27,39 @@ public static class MapViews
     public const float NearReach = 5;
 
     public const string UnknownArea = "view";
+
+    /// <summary>How many nodes must stand at one angle before a picture turns to it; fewer may be a crate set askew.</summary>
+    public const int MinTurnedNodes = 3;
+
+    /// <summary>
+    /// The angle, in degrees within [-45, 45), the place inside <paramref name="cover"/> is built at, read off how the
+    /// game's nodes there are turned. A building's furniture stands square to its walls, so the most common angle
+    /// (folded into a quarter turn, as a shelf turned 90 degrees is still square) is the building's. Zero when no angle
+    /// has <see cref="MinTurnedNodes"/> nodes, and zero wins a tie, since most of the game is built square.
+    /// </summary>
+    public static float YawOf(MapArea cover, IEnumerable<(WorldPoint Point, float Yaw)> nodes)
+    {
+        var folded = nodes
+            .Where(node => IsInside(cover, node.Point) && float.IsFinite(node.Yaw))
+            .Select(node => Fold(node.Yaw))
+            .ToList();
+        var best = folded
+            .GroupBy(yaw => (int)Math.Round(yaw))
+            .Where(group => group.Count() >= MinTurnedNodes)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => Math.Abs(group.Key))
+            .FirstOrDefault();
+
+        return best is null || best.Key == 0 ? 0 : best.Average();
+    }
+
+    /// <summary>An angle folded into [-45, 45): turning a quarter turn more or less leaves a square building square.</summary>
+    public static float Fold(float yaw)
+    {
+        var folded = (yaw + 45) % 90;
+
+        return (folded < 0 ? folded + 90 : folded) - 45;
+    }
 
     /// <summary>The map's camera area the game camera's box is, or null when none is within <see cref="MatchTolerance"/>.</summary>
     public static MapArea? AreaOf(IReadOnlyList<MapArea> areas, WorldPoint min, WorldPoint max)
@@ -87,6 +122,10 @@ public static class MapViews
         return true;
     }
 
+    private static bool IsInside(MapArea box, WorldPoint point) =>
+        point.X >= Math.Min(box.Min.X, box.Max.X) && point.X <= Math.Max(box.Min.X, box.Max.X) &&
+        point.Z >= Math.Min(box.Min.Z, box.Max.Z) && point.Z <= Math.Max(box.Min.Z, box.Max.Z);
+
     private static float BoxDistance(MapArea area, WorldPoint min, WorldPoint max)
     {
         var corners = new[]
@@ -108,7 +147,7 @@ public static class MapViews
 /// </summary>
 public sealed class AutoViews
 {
-    public const float SettleSeconds = 5;
+    public const float SettleSeconds = 10;
     public const float RetrySeconds = 10;
     public const int MaxTries = 3;
 
