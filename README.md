@@ -4,7 +4,7 @@
 
 The game's code can be read in a disassembler, but the data it loads cannot: item stack limits, action durations, payout intervals, interest rates, the Chinese and English text, and the default key bindings. This plugin writes all of it out once per launch.
 
-Built for Survival Log 1.1.18902 with BepInEx 6 (IL2CPP) `6.0.0-be.788`. It needs [Exiled's Toolkit](https://github.com/AnExiledDev/SurvivalLog-ExiledToolkit) 0.4.0 or newer, which applies changed settings at once. Install it like any other mod: put `DataDump.dll` in `BepInEx/plugins`.
+Built for Survival Log 1.1.18902 with BepInEx 6 (IL2CPP) `6.0.0-be.788`. It works with [Exiled's Toolkit](https://github.com/AnExiledDev/SurvivalLog-ExiledToolkit) 0.4.0 or newer, which is optional. With it, settings changed on the Mod Manager's Mods screen take effect without restarting the game. Without it, they take effect at the next game start. Install it like any other mod: put `DataDump.dll` in `BepInEx/plugins`.
 
 ## What it writes
 
@@ -92,6 +92,12 @@ Other keys nearby:
 
 - The other mods in this collection use F6 to F9, and WebUI Doctor uses Ctrl+F11 and Ctrl+F12. F5 and F10 are free of them. Camera keeps F10 out of the keys it lets you bind.
 - The game lets you bind F keys in its own key settings. If you bind F5 or F10 to a game action there, that action may run on the same press.
+
+## Contact
+
+To reach me directly, message `exiled.dev` on Discord; you can find me in the [official Survival Log Discord](https://discord.gg/MZGg4gQAUe). I'm also on X as [@AnExiledDev](https://x.com/AnExiledDev).
+
+A Survival Log wiki with detailed documentation for all of my mods is coming soon.
 
 ## Planned
 

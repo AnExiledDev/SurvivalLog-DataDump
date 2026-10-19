@@ -3,14 +3,13 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Unity.IL2CPP;
 using DataDump.Adapters;
-using ExiledToolkit;
 using HarmonyLib;
 using UnityEngine;
 
 namespace DataDump;
 
 [BepInPlugin(Guid, "Data Dump", Version)]
-[BepInDependency(ExiledToolkit.Plugin.Guid, ">=0.4.0")]
+[BepInDependency(OptionalLive.ToolkitGuid, BepInDependency.DependencyFlags.SoftDependency)]
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.datadump";
@@ -18,12 +17,14 @@ public sealed class Plugin : BasePlugin
 
     public override void Load()
     {
+        if (!OptionalLive.IsToolkitInstalled) Log.LogInfo(OptionalLive.MissingNote);
+
         var isEnabled = Config.Bind("General", "Enabled", true, new ConfigDescription(
             "Write the game's data tables, its text in both languages and its key bindings to BepInEx/data-dump once the game has loaded. Off: this tool does nothing at all. Default: on. Takes effect at the next game start.\n" +
             "游戏载入完成后，把游戏的数据表、中英文文本和按键设置写入 BepInEx/data-dump 文件夹。关闭后，这个工具什么都不做。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
         var dumpKey = Config.Bind("General", "DumpKey", KeyCode.F5,
-            "Hold Ctrl and press this key to write the data tables and the mod health again. Default: F5 (Ctrl+F5).\n" +
-            "按住 Ctrl 再按这个键，重新写入数据表和模组状态。默认 F5，即 Ctrl+F5。");
+            new ConfigDescription("Hold Ctrl and press this key to write the data tables and the mod health again. Default: F5 (Ctrl+F5).\n" +
+            "按住 Ctrl 再按这个键，重新写入数据表和模组状态。默认 F5，即 Ctrl+F5。", null, "ModManager.ShowWhen=Enabled"));
         var snapshotKey = Config.Bind("Snapshot", "Key", KeyCode.F10,
             "Hold Ctrl and press this key to save a bug snapshot to BepInEx/data-dump/snapshots: a screenshot, the game state, the open pages, the logs and the mod health. Default: F10 (Ctrl+F10).\n" +
             "按住 Ctrl 再按这个键，把一份问题快照保存到 BepInEx/data-dump/snapshots 文件夹：截图、游戏状态、打开的页面、日志和模组状态。默认 F10，即 Ctrl+F10。");
@@ -68,7 +69,7 @@ public sealed class Plugin : BasePlugin
     }
 
     private static void WatchKey(ConfigEntry<KeyCode> entry, CtrlHotkey hotkey, string what, DumpLog log) =>
-        LiveSettings.Watch(entry, key =>
+        OptionalLive.Watch(entry, key =>
         {
             hotkey.Use(key);
             log.Write($"{what} {hotkey.Name}");
