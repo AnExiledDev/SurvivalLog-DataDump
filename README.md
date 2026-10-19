@@ -115,7 +115,7 @@ They are written 30 seconds after the game has loaded, with every snapshot, and 
 
 ## Keys and config
 
-Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The three keys can also be changed in game on the Mod Manager's Mods screen, where they take effect at once; the other settings take effect at the next game start.
+Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The three keys can also be changed in game on the Mod Manager's Mods screen, where they take effect at once with Exiled's Toolkit installed; the other settings take effect at the next game start.
 
 | Section | Key | Default | What it does |
 | --- | --- | --- | --- |
