@@ -18,8 +18,8 @@ Everything goes to `BepInEx/data-dump/` in the game folder.
 | `manifest.json` | The game version, when the dump ran and why, the current language, each table's row count, and every table or file that was skipped or failed, with the reason. |
 | `mod-health.json`, `mod-health.txt` | See [Mod health](#mod-health). |
 | `enums.json` | Every enum in the game's code, value to name. Config fields hold plain numbers; this names them. |
-| `maps/<location>.json` | See [Maps](#maps). |
-| `maps/<location>/` | See [Maps](#maps). |
+| `maps/<phase>/<location>.json` | See [Maps](#maps). |
+| `maps/<phase>/<location>/` | See [Maps](#maps). |
 | `npc-dialogue/<key>.json` | The NPC dialogue the game had loaded when a location was written. |
 | `action-ledger.tsv` | See [Action ledger](#action-ledger). |
 | `loot-ledger.tsv` | See [Loot ledger](#loot-ledger). |
@@ -53,9 +53,11 @@ Only the 50 newest snapshots are kept. A line in `data-dump.log` says where each
 
 ## Maps
 
-The game loads one location at a time: the home, before or after the disaster, or an expedition. The first frame a new location is there, `maps/<location>.json` gets its map data: every furniture spot, building slot, package spot and camera area, each with its world position and rotation, plus the scene name.
+The game loads one location at a time: the home, before or after the disaster, or an expedition. Once a new location is there, `maps/<phase>/<location>.json` gets its map data: every furniture spot, building slot, package spot and camera area, each with its world position and rotation, plus the scene name, the game's world state and chapter.
 
-The plugin also takes top-down pictures into `maps/<location>/`, of the place the game shows. The game only draws the part of a location you are at (your home, or the one store you walked into) and only the floor you are viewing, so a picture of anything else would be black. Once the view has stayed on a place for 10 seconds, its pictures are taken, once per game session. To get them all, walk into each store, and in a home switch to each floor with the game's floor views (F1 to F3) and wait about 10 seconds on each. **Ctrl+F4** retakes the place and floor on view now. Each place gets two:
+`<phase>` is `pre-disaster` or `post-disaster`, read from the game's clock (scene names do not tell: `Scene_AfterTheDisaster02` is the world before the disaster). If the clock does not say within 10 seconds, the folder is `unknown-phase`.
+
+The plugin also takes top-down pictures into `maps/<phase>/<location>/`, of the place the game shows. The game only draws the part of a location you are at (your home, or the one store you walked into) and only the floor you are viewing, so a picture of anything else would be black. Once the view has stayed on a place for 10 seconds, its pictures are taken, once per game session. To get them all, walk into each store, and in a home switch to each floor with the game's floor views (F1 to F3) and wait about 10 seconds on each. **Ctrl+F4** retakes the place and floor on view now. Each place gets two:
 
 - `<area>.plan.png` looks down from a little above the floor (2.2 m by default), so ceilings and upper floors are cut away and the rooms show.
 - `<area>.top.png` looks down from high above, roofs and all.
@@ -78,7 +80,7 @@ Each picture has a `.json` beside it with the frame: its turn `Yaw` in degrees, 
 | `map` | The location loaded at the time. |
 | `group` | The `Config_RandomGroup` id. |
 | `count` | How many picks were asked for. |
-| `discover_lv`, `guarantee_lv` | The discovery and guarantee levels it rolled at. |
+| `discover_lv`, `guarantee_lv` | The discovery and guarantee levels it rolled at. A `discover_lv` of 2147483647 means no discovery limit: every entry of the group can come up. Shops, random-item effects and items an event puts into furniture roll this way. |
 | `items` | The item ids it gave, comma-separated. |
 
 Lines are written every 5 seconds, so the last few before the game closes may be missing. Up to 10,000 wait while the file is locked by another program.

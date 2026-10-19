@@ -14,7 +14,7 @@ namespace DataDump.Adapters;
 /// Takes top-down pictures of what the game shows: the camera area the game keeps its view in (CameraManager's
 /// min and max world position) and the floor it shows (_appliedVisibleFloor, a MapPoint id). The game draws only that
 /// area and that floor, so a picture of anything else comes out black. Each picture goes to
-/// maps/&lt;location&gt;/&lt;area&gt;[.floor&lt;id&gt;].&lt;plan|top&gt;.png, beside a .json with the frame that puts the
+/// maps/&lt;phase&gt;/&lt;location&gt;/&lt;area&gt;[.floor&lt;id&gt;].&lt;plan|top&gt;.png, beside a .json with the frame that puts the
 /// location's node positions on it. On their own, a place's pictures are taken once a session after the view has
 /// stayed on it a few seconds; the key retakes the place on view now. A black picture is never written. A building
 /// standing at an angle is pictured turned square, and a large picture is rendered in tiles, as one render target that
@@ -150,7 +150,7 @@ internal sealed class MapCapture
     private bool TakeNow(MapView view, string trigger)
     {
         var shots = MapShots.For(view, _cutHeight, _pixelsPerMeter, MaxPixels);
-        var folder = Path.Combine(_mapsFolder, FileNames.Safe(view.Location));
+        var folder = Path.Combine(_mapsFolder, WorldPhase.FolderOf(MapWatcher.Phase().WorldState), FileNames.Safe(view.Location));
         var mask = CullingMask();
         var isGood = shots.Count > 0;
 
