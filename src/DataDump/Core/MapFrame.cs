@@ -62,18 +62,5 @@ public sealed record MapFrame(float MinX, float MaxX, float MinZ, float MaxZ, fl
         return heights.Count == 0 ? fallback : heights[heights.Count / 2];
     }
 
-    /// <summary>The box round every node, for a map that names no areas of its own; null when there are no nodes.</summary>
-    public static (WorldPoint Min, WorldPoint Max)? BoundsOf(IEnumerable<WorldPoint> nodes)
-    {
-        var list = nodes.ToList();
-
-        if (list.Count == 0) return null;
-
-        var min = new WorldPoint(list.Min(node => node.X), list.Min(node => node.Y), list.Min(node => node.Z));
-        var max = new WorldPoint(list.Max(node => node.X), list.Max(node => node.Y), list.Max(node => node.Z));
-
-        return (min, max);
-    }
-
     private static bool IsBetween(float value, float a, float b) => value >= Math.Min(a, b) && value <= Math.Max(a, b);
 }

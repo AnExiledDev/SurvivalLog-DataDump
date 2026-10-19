@@ -65,13 +65,4 @@ public class MapFrameTests
     {
         Assert.Equal(7f, MapFrame.FloorOf(new[] { At(50, 0, 50) }, At(0, 0, 0), At(10, 0, 10), 7));
     }
-
-    [Fact]
-    public void The_bounds_hold_every_node()
-    {
-        var bounds = MapFrame.BoundsOf(new[] { At(1, 5, -2), At(-3, 0, 4) });
-
-        Assert.Equal((At(-3, 0, -2), At(1, 5, 4)), bounds);
-        Assert.Null(MapFrame.BoundsOf(Array.Empty<WorldPoint>()));
-    }
 }

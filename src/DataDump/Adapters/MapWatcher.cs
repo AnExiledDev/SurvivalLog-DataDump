@@ -27,16 +27,13 @@ internal sealed class MapWatcher
 
     private readonly string _folder;
     private readonly Action<string> _log;
-    private readonly Action<Config_Map, string, float> _onNewMap;
     private readonly ValueWriter _values = new(new Il2CppValueReader(), MaxDepth, isIndented: true, isNestedIdOnly: false);
     private IntPtr _lastMap;
 
-    /// <param name="onNewMap">Called after a new location's data is written, with the map, its name and the time.</param>
-    public MapWatcher(string folder, Action<string> log, Action<Config_Map, string, float> onNewMap)
+    public MapWatcher(string folder, Action<string> log)
     {
         _folder = folder;
         _log = log;
-        _onNewMap = onNewMap;
     }
 
     /// <summary>The current location's map, or null while none is loaded.</summary>
@@ -55,7 +52,6 @@ internal sealed class MapWatcher
 
         WriteMap(map, name);
         WriteDialogueSoftly();
-        _onNewMap(map, name, now);
     }
 
     private void WriteMap(Config_Map map, string name)
@@ -72,7 +68,7 @@ internal sealed class MapWatcher
         _log($"map data: {name} written to {path}");
     }
 
-    /// <summary>Dialogue is a side file; a failure there is logged and the location's pictures are still taken.</summary>
+    /// <summary>Dialogue is a side file; a failure there is logged and the map data still counts as written.</summary>
     private void WriteDialogueSoftly()
     {
         try
