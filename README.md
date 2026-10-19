@@ -4,7 +4,7 @@
 
 The game's code can be read in a disassembler, but the data it loads cannot: item stack limits, action durations, payout intervals, interest rates, the Chinese and English text, and the default key bindings. This plugin writes all of it out once per launch.
 
-Built for Survival Log 1.1.18902 with BepInEx 6 (IL2CPP) `6.0.0-be.788`. Install it like any other mod: put `DataDump.dll` in `BepInEx/plugins`.
+Built for Survival Log 1.1.18902 with BepInEx 6 (IL2CPP) `6.0.0-be.788`. It needs [Exiled's Toolkit](https://github.com/AnExiledDev/SurvivalLog-ExiledToolkit) 0.4.0 or newer, which applies changed settings at once. Install it like any other mod: put `DataDump.dll` in `BepInEx/plugins`.
 
 ## What it writes
 
@@ -79,7 +79,7 @@ They are written 30 seconds after the game has loaded, with every snapshot, and 
 
 ## Keys and config
 
-Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`.
+Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The two keys can also be changed in game on the Mod Manager's Mods screen, where they take effect at once; the two `Enabled` settings take effect at the next game start.
 
 | Section | Key | Default | What it does |
 | --- | --- | --- | --- |

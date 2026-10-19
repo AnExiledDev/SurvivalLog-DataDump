@@ -6,7 +6,7 @@ namespace DataDump.Adapters;
 /// <summary>A Ctrl+key hotkey. Turns itself off if the game has the legacy input API disabled.</summary>
 internal sealed class CtrlHotkey
 {
-    private readonly KeyCode _key;
+    private KeyCode _key;
     private readonly Action<string> _log;
     private bool _isDisabled;
 
@@ -17,6 +17,9 @@ internal sealed class CtrlHotkey
     }
 
     public string Name => "Ctrl+" + _key;
+
+    /// <summary>Called on the main thread after each change of the key; the next press is read with it.</summary>
+    public void Use(KeyCode key) => _key = key;
 
     public bool WasPressed()
     {
