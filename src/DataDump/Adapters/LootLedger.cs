@@ -50,7 +50,7 @@ internal static class LootLedger
         }
         catch (Exception ex)
         {
-            log("loot ledger off, the loot roll could not be hooked: " + ex.Message);
+            log("could not hook the loot roll, the loot ledger is off: " + ex.Message);
         }
 
         return _isOn;

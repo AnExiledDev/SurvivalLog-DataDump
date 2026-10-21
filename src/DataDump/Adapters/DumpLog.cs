@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using BepInEx.Logging;
+using DataDump.Core;
 
 namespace DataDump.Adapters;
 
@@ -28,7 +29,8 @@ internal sealed class DumpLog
     {
         try
         {
-            _bepinex.LogInfo(message);
+            if (HookFailure.Is(message)) _bepinex.LogError(message);
+            else _bepinex.LogInfo(message);
         }
         catch (Exception)
         {

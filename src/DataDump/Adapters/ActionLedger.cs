@@ -70,7 +70,7 @@ internal static class ActionLedger
         }
         catch (Exception ex)
         {
-            log("action ledger off, the game's actions could not be hooked: " + ex.Message);
+            log("could not hook the game's actions, the action ledger is off: " + ex.Message);
         }
 
         return _isOn;
