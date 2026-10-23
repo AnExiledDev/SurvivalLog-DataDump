@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using DataDump.Core;
 using GameCore.HotUpdate;
@@ -98,13 +99,22 @@ internal sealed class MapCapture
         var floorPoint = FloorPointOf(floorId);
         var min = PointOf(camera._minWorldPosition_k__BackingField);
         var max = PointOf(camera._maxWorldPosition_k__BackingField);
-        var area = MapViews.AreaOf(layout.Areas, min, max)
+        var isGameDefault = MapViews.IsGameDefault(min, max);
+        var area = (isGameDefault ? null : MapViews.AreaOf(FloorAreaFirst(layout.Areas, floorPoint?.CameraRange), min, max))
                    ?? layout.Areas.Find(candidate => candidate.Name == floorPoint?.CameraRange)
+                   ?? (isGameDefault ? MapViews.AroundNodes(layout.Name, layout.Nodes) : null)
                    ?? new MapArea(MapViews.UnknownArea, min, max);
         var cover = MapViews.Cover(area, layout.Areas.Count, layout.Nodes);
 
         return new MapView(layout.Name, cover, floorId, FloorYOf(layout, floorPoint, cover), MapViews.YawOf(cover, layout.Turns));
     }
+
+    /// <summary>
+    /// The areas with the floor's own first: the Office's 1F and 2F are the same box, and a tie goes to the first, so
+    /// the second floor's picture is named 2F rather than 1F.
+    /// </summary>
+    private static List<MapArea> FloorAreaFirst(List<MapArea> areas, string? floorArea) =>
+        string.IsNullOrEmpty(floorArea) ? areas : areas.OrderBy(area => area.Name == floorArea ? 0 : 1).ToList();
 
     private static CameraManager? WorldCamera() => GameSingleton.Existing<BattleShowWorld>()?._CameraManager;
 

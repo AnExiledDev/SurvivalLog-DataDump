@@ -33,8 +33,8 @@ public class MapViewsTests
         var nodes = new[] { At(247, 20), At(400, 20) };
         var cover = MapViews.Cover(Market, 2, nodes);
 
-        Assert.Equal(247, cover.Max.X);
-        Assert.Equal(200, cover.Min.X);
+        Assert.Equal(247 + MapViews.ViewMargin, cover.Max.X);
+        Assert.Equal(200 - MapViews.ViewMargin, cover.Min.X);
     }
 
     // An expedition's one camera area can be a small part of the building; its picture must hold every spot.
@@ -44,7 +44,38 @@ public class MapViewsTests
         var nodes = new[] { At(30, -100), At(70, -60) };
         var cover = MapViews.Cover(new MapArea("School", At(53, -86), At(77, -68)), 1, nodes);
 
-        Assert.Equal((30f, -100f, 77f, -60f), (cover.Min.X, cover.Min.Z, cover.Max.X, cover.Max.Z));
+        var m = MapViews.ViewMargin;
+
+        Assert.Equal((30 - m, -100 - m, 77 + m, -60 + m), (cover.Min.X, cover.Min.Z, cover.Max.X, cover.Max.Z));
+    }
+
+    // The Tech Company's walls stand past its last spot; a picture cut at the spots loses the building's edge.
+    [Fact]
+    public void A_picture_reaches_past_its_area_on_every_side()
+    {
+        var cover = MapViews.Cover(Home, 2, new WorldPoint[0]);
+
+        Assert.True(MapViews.ViewMargin >= 10);
+        Assert.Equal((-45 - MapViews.ViewMargin, 23 + MapViews.ViewMargin), (cover.Min.X, cover.Max.Z));
+    }
+
+    // The Hospital's map point names a camera area its map lacks, so the game camera's box is +-9999 m. A picture
+    // of that box is 2 m a pixel and samples black; it must be taken of the place's nodes instead.
+    [Fact]
+    public void The_game_fallback_box_is_not_a_real_area()
+    {
+        Assert.True(MapViews.IsGameDefault(At(-9999, -9999), At(9999, 9999)));
+        Assert.False(MapViews.IsGameDefault(At(-62, -28), At(56.6f, 33.5f)));
+    }
+
+    [Fact]
+    public void A_fallback_view_is_the_box_around_the_nodes_named_for_the_place()
+    {
+        var area = MapViews.AroundNodes("TanSuo_Hospital", new[] { At(-57.5f, 28.6f), At(57, -27), At(0, 0) });
+
+        Assert.Equal("TanSuo_Hospital", area?.Name);
+        Assert.Equal((-57.5f, -27f, 57f, 28.6f), (area!.Min.X, area.Min.Z, area.Max.X, area.Max.Z));
+        Assert.Null(MapViews.AroundNodes("empty", new WorldPoint[0]));
     }
 
     [Fact]

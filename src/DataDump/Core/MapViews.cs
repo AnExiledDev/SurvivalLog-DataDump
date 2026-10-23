@@ -28,6 +28,18 @@ public static class MapViews
 
     public const string UnknownArea = "view";
 
+    /// <summary>
+    /// How far, in meters, past its area and nodes a picture reaches. The camera's center stays inside the area, but
+    /// the player still sees the walls and rooms around it, which can stand well past the last node.
+    /// </summary>
+    public const float ViewMargin = 12;
+
+    /// <summary>
+    /// The game camera's box when a map point names a camera area its map does not have: the game falls back to
+    /// +-9999 m on each side (ConfigManager.GetCameraRange). The Hospital and the School name one their map lacks.
+    /// </summary>
+    public const float GameDefaultReach = 9000;
+
     /// <summary>How many nodes must stand at one angle before a picture turns to it; fewer may be a crate set askew.</summary>
     public const int MinTurnedNodes = 3;
 
@@ -80,9 +92,25 @@ public static class MapViews
         return best;
     }
 
+    /// <summary>True when the game camera's box is the game's fallback for a missing camera area, not a real one.</summary>
+    public static bool IsGameDefault(WorldPoint min, WorldPoint max) =>
+        Math.Max(Math.Max(Math.Abs(min.X), Math.Abs(min.Z)), Math.Max(Math.Abs(max.X), Math.Abs(max.Z))) >= GameDefaultReach;
+
     /// <summary>
-    /// The box a picture of an area covers: the area grown to hold the nodes standing near it. A map with a single
-    /// area (an expedition) is grown to hold every node, as its one area is often far smaller than the place.
+    /// The area to picture when the game camera's box is its fallback: the box around every node, named for the
+    /// location. Null when there are no nodes, as then nothing tells where the place is.
+    /// </summary>
+    public static MapArea? AroundNodes(string name, IReadOnlyList<WorldPoint> nodes)
+    {
+        if (nodes.Count == 0) return null;
+
+        return new MapArea(name, new WorldPoint(nodes.Min(node => node.X), 0, nodes.Min(node => node.Z)), new WorldPoint(nodes.Max(node => node.X), 0, nodes.Max(node => node.Z)));
+    }
+
+    /// <summary>
+    /// The box a picture of an area covers: the area grown to hold the nodes standing near it, then by
+    /// <see cref="ViewMargin"/> on every side. A map with a single area (an expedition) is grown to hold every node, as
+    /// its one area is often far smaller than the place.
     /// </summary>
     public static MapArea Cover(MapArea area, int areaCount, IReadOnlyList<WorldPoint> nodes)
     {
@@ -103,7 +131,11 @@ public static class MapViews
             grownMaxZ = Math.Max(grownMaxZ, node.Z);
         }
 
-        return area with { Min = new WorldPoint(grownMinX, area.Min.Y, grownMinZ), Max = new WorldPoint(grownMaxX, area.Max.Y, grownMaxZ) };
+        return area with
+        {
+            Min = new WorldPoint(grownMinX - ViewMargin, area.Min.Y, grownMinZ - ViewMargin),
+            Max = new WorldPoint(grownMaxX + ViewMargin, area.Max.Y, grownMaxZ + ViewMargin),
+        };
     }
 
     /// <summary>
