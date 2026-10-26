@@ -133,6 +133,7 @@ internal sealed class TableDumper
         jobs.Enqueue(new LanguageJob("lang-en", () => configs.customCache?.EnglishLanguageMap));
         jobs.Enqueue(new InputJob());
         jobs.Enqueue(new EnumJob(_log));
+        jobs.Enqueue(new CodeTablesJob());
 
         _run = new Run(trigger, DateTimeOffset.Now, LanguageOf(configs), GameVersion(), jobs, tables);
         _log($"dump ({trigger}) started: {tableCount} tables to {_folder}");

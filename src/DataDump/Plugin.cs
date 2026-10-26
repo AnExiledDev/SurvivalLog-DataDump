@@ -14,7 +14,7 @@ namespace DataDump;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.datadump";
-    private const string Version = "0.3.5";
+    private const string Version = "0.3.6";
 
     /// <summary>How long quitting waits for the files still being written.</summary>
     private static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(3);
@@ -57,6 +57,9 @@ public sealed class Plugin : BasePlugin
         var isLootLedgerOn = Config.Bind("Loot", "Enabled", true, new ConfigDescription(
             "Write one line to BepInEx/data-dump/loot-ledger.tsv for every roll of a loot group: the group, the location, the discovery level and the items it gave. Default: on. Takes effect at the next game start.\n" +
             "每次随机掉落组抽取物品时，在 BepInEx/data-dump/loot-ledger.tsv 里写一行：掉落组、地点、探索等级和得到的物品。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
+        var isItemLedgerOn = Config.Bind("Items", "Enabled", true, new ConfigDescription(
+            "Write one line to BepInEx/data-dump/item-ledger.tsv for every item the game puts into a bag (yours, a container's, a robot's): the day, the location, whose bag, the item, how many, and what gave it, such as a reward, a story drop or container loot. Default: on. Takes effect at the next game start.\n" +
+            "游戏每把一件物品放进背包（你的、容器的、机器人的）时，在 BepInEx/data-dump/item-ledger.tsv 里写一行：天数、地点、谁的背包、物品、数量，以及来源，例如奖励、剧情掉落或容器战利品。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
         var isBundleExportOn = Config.Bind("Bundles", "Export", false, new ConfigDescription(
             "At game start, write the game's asset bundles decrypted to BepInEx/data-dump/bundles, for asset tools. All of them take about 4 GB; bundles already written are skipped. Default: off. Takes effect at the next game start.\n" +
             "游戏启动时，把游戏的资源包解密后写入 BepInEx/data-dump/bundles 文件夹，供资源工具使用。全部约 4 GB；已写入的资源包会跳过。默认关闭。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
@@ -69,7 +72,7 @@ public sealed class Plugin : BasePlugin
 
         log.TrimIfLarge();
         log.Write($"===== Data Dump {Version} started, enabled {isEnabled}, dump key Ctrl+{dumpKey.Value}, snapshot key Ctrl+{snapshotKey.Value}, action ledger {isLedgerOn}, " +
-                  $"maps {areMapsOn} (auto pictures {isAutoPictures}, daylight {isDaylight}, picture key Ctrl+{pictureKey.Value}), loot ledger {isLootLedgerOn}, bundle export {isBundleExportOn}");
+                  $"maps {areMapsOn} (auto pictures {isAutoPictures}, daylight {isDaylight}, picture key Ctrl+{pictureKey.Value}), loot ledger {isLootLedgerOn}, item ledger {isItemLedgerOn}, bundle export {isBundleExportOn}");
 
         if (!isEnabled) return;
 
@@ -88,6 +91,7 @@ public sealed class Plugin : BasePlugin
 
         if (isLedgerOn && ActionLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(ActionLedger.Tick);
         if (isLootLedgerOn && LootLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(LootLedger.Tick);
+        if (isItemLedgerOn && ItemLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(ItemLedger.Tick);
         if (isBundleExportOn) BundleExport.Start(Paths.GameDataPath, folder, bundleFilter, log.Write);
         if (areMapsOn) WatchMaps(folder, isAutoPictures, isDaylight, pictureKey, pixelsPerMeter, cutHeight, log);
 

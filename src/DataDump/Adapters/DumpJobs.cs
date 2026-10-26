@@ -158,6 +158,78 @@ internal sealed class InputJob : DumpJob
 }
 
 /// <summary>
+/// code-tables.json: every table the game keeps in code instead of config (<see cref="StaticTables"/>), keyed by class
+/// and field, one table per line, so a game update that changes one shows in a diff. Covers the gameplay assembly. A
+/// table is read through its interop property, which first runs the class's static constructor if the game has not
+/// yet; that constructor is what fills the table. A table that cannot be read is written as an !error string.
+/// </summary>
+internal sealed class CodeTablesJob : DumpJob
+{
+    private const int TypesPerStep = 200;
+    private const int Depth = 5;
+
+    public CodeTablesJob() : base("code-tables", "code-tables.json", isTable: false)
+    {
+    }
+
+    public override IEnumerable<bool> Steps(TextWriter writer)
+    {
+        var assembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "HotUpdate");
+
+        if (assembly is null)
+        {
+            SkipReason = "the game's HotUpdate assembly is not loaded";
+
+            yield break;
+        }
+
+        var tables = new List<(string Key, System.Reflection.PropertyInfo Field)>();
+        var seen = 0;
+
+        foreach (var type in EnumJob.LoadableTypes(assembly).OrderBy(t => t.FullName, StringComparer.Ordinal))
+        {
+            // Compiler-made classes (lambda caches, iterators) hold delegates and state, not tables.
+            if (type.FullName is not { } name || name.Contains('<') || name.Contains("__c") || name.Contains("_d__")) continue;
+
+            tables.AddRange(StaticTables.Of(type, IsTableType).Select(field => (StaticTables.Key(type, field), field)));
+
+            if (++seen % TypesPerStep == 0) yield return true;
+        }
+
+        var values = new ValueWriter(new Il2CppValueReader(), Depth, isIndented: false, isNestedIdOnly: false);
+        var shape = FileShape.JsonObject;
+
+        writer.Write(shape.Start);
+
+        foreach (var (key, field) in tables)
+        {
+            string json;
+
+            try
+            {
+                json = values.Write(field.GetValue(null));
+            }
+            catch (Exception ex)
+            {
+                json = JsonText.Quote(ValueWriter.ErrorText(ex));
+            }
+
+            writer.Write(shape.Before(Count));
+            writer.Write("  " + JsonText.Quote(key) + ": " + json);
+            Count++;
+
+            yield return true;
+        }
+
+        writer.Write(shape.Finish(Count));
+    }
+
+    /// <summary>Interop arrays, and the game's lists, sets and dictionaries.</summary>
+    private static bool IsTableType(Type type) =>
+        typeof(Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppArrayBase).IsAssignableFrom(type) || Il2CppCollections.IsCollection(type);
+}
+
+/// <summary>
 /// enums.json: every enum the game's code declares, from the interop assemblies by reflection. Config fields hold plain
 /// numbers, and this names them. A type that cannot be read is left out and counted in the log, not the whole file.
 /// Reflection over thousands of types and no game read, so it is all the worker's.
@@ -199,7 +271,7 @@ internal sealed class EnumJob : DumpJob
             .SelectMany(LoadableTypes)
             .Where(type => type.IsEnum && type.FullName is not null);
 
-    private static IEnumerable<Type> LoadableTypes(System.Reflection.Assembly assembly)
+    public static IEnumerable<Type> LoadableTypes(System.Reflection.Assembly assembly)
     {
         try
         {

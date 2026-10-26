@@ -18,11 +18,13 @@ Everything goes to `BepInEx/data-dump/` in the game folder.
 | `manifest.json` | The game version, when the dump ran and why, the current language, each table's row count, and every table or file that was skipped or failed, with the reason. |
 | `mod-health.json`, `mod-health.txt` | See [Mod health](#mod-health). |
 | `enums.json` | Every enum in the game's code, value to name. Config fields hold plain numbers; this names them. |
+| `code-tables.json` | Every table the game keeps in its code instead of a config table (a static list, array, set or dictionary, such as `GameCore.HotUpdate.Battle.Logic.StrangerTradeActiveManager.RobotModuleShelfPins`), keyed by class and field, one per line. A table that could not be read holds an `!error` string. |
 | `maps/<phase>/<location>.json` | See [Maps](#maps). |
 | `maps/<phase>/<location>/` | See [Maps](#maps). |
 | `npc-dialogue/<key>.json` | The NPC dialogue the game had loaded when a location was written. |
 | `action-ledger.tsv` | See [Action ledger](#action-ledger). |
 | `loot-ledger.tsv` | See [Loot ledger](#loot-ledger). |
+| `item-ledger.tsv` | See [Item ledger](#item-ledger). |
 | `bundles/` | See [Asset bundles](#asset-bundles). Off by default. |
 | `snapshots/<yyyyMMdd-HHmmss>/` | See [Bug snapshots](#bug-snapshots). |
 
@@ -85,6 +87,23 @@ Each picture has a `.json` beside it with the frame: its turn `Yaw` in degrees, 
 
 Lines are written every 5 seconds, so the last few before the game closes may be missing. Up to 10,000 wait while the file is locked by another program.
 
+## Item ledger
+
+`item-ledger.tsv` gets one line every time the game puts a new item into a bag: yours, a container's, a robot's or a survivor's. Container loot, story items, rewards, gifts, pickups and crafts all pass through here. Moving an item from one bag to another does not. Tab-separated, with a header line.
+
+| Column | Meaning |
+| --- | --- |
+| `time` | The computer's clock. |
+| `day` | The game's day counter. Empty when no save is loaded. |
+| `map` | The location loaded at the time. |
+| `owner` | Whose bag: `player`, `robot`, `survivor`, `furniture:<Config_Furniture id>`, `agent:<config id>` for anything else, or `id:<instance id>` when the owner was not found. |
+| `item` | The `Config_Item` id. |
+| `count` | How many. |
+| `added` | `yes`, or `no` when the item did not fit. |
+| `context` | The game methods giving the item, outermost first and joined by ` > `, for example `ExecuteItemReward 71110 > TryAddPackageItems 9001`. A reward names its `Config_RewardSet` id and a package its item id. Empty when the item came from somewhere else. |
+
+Lines are written every 5 seconds, like the loot ledger.
+
 ## Asset bundles
 
 With `Bundles.Export` on, the plugin writes the game's asset bundles at game start, decrypted, to `bundles/<name>.bundle`, where asset tools such as AssetRipper can open them. It runs beside the game and logs when it is done. All of them take about 4 GB; `Bundles.Filter` limits it to names containing one of its words. A bundle already written at its full size is skipped.
@@ -138,6 +157,7 @@ Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The three keys c
 | `Maps` | `Daylight` | `true` | Switches the game's light to midday while pictures are taken, then back. |
 | `Maps` | `CutHeight` | `2.2` | How far above the floor the plan pictures start, in meters. |
 | `Loot` | `Enabled` | `true` | Writes the loot ledger. |
+| `Items` | `Enabled` | `true` | Writes the item ledger. |
 | `Bundles` | `Export` | `false` | Writes the decrypted asset bundles at game start. |
 | `Bundles` | `Filter` | empty | Only bundles whose name contains one of these comma-separated words. Empty: all. |
 
