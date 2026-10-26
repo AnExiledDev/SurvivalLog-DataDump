@@ -13,6 +13,10 @@ internal sealed class DumpSession
 {
     private const double SettleSeconds = 2;
     private const double HealthDelaySeconds = 30;
+    private const double LoadCheckSeconds = 0.25;
+
+    /// <summary>Held once, so the per-frame load check hands the gate no new delegate.</summary>
+    private static readonly Func<bool> IsLoadedCheck = IsLoaded;
 
     private readonly TableDumper _dumper;
     private readonly ModHealthProbe _health;
@@ -21,6 +25,7 @@ internal sealed class DumpSession
     private readonly CtrlHotkey _snapshotKey;
     private readonly string _folder;
     private readonly LoadGate _loadGate = new(SettleSeconds);
+    private readonly Every _loadEvery = new(LoadCheckSeconds);
     private double? _healthDueAt;
 
     public DumpSession(TableDumper dumper, ModHealthProbe health, SnapshotTaker snapshots, CtrlHotkey dumpKey, CtrlHotkey snapshotKey, string folder)
@@ -35,7 +40,7 @@ internal sealed class DumpSession
 
     public void WatchLoad(float now)
     {
-        if (!_loadGate.Poll(IsLoaded(), now)) return;
+        if (!_loadGate.Poll(IsLoadedCheck, _loadEvery, now)) return;
 
         _dumper.Start("load");
         _healthDueAt = now + HealthDelaySeconds;
@@ -48,7 +53,7 @@ internal sealed class DumpSession
         if (!_dumpKey.WasPressed()) return;
 
         _dumper.Start(_dumpKey.Name);
-        _health.WriteTo(_dumpKey.Name, _folder);
+        _health.Post(_dumpKey.Name, _folder);
     }
 
     public void CheckHealthDue(float now)
@@ -56,7 +61,7 @@ internal sealed class DumpSession
         if (_healthDueAt is not { } dueAt || now < dueAt) return;
 
         _healthDueAt = null;
-        _health.WriteTo("30 s after load", _folder);
+        _health.Post("30 s after load", _folder);
     }
 
     public void CheckSnapshotKey(float now)
@@ -64,7 +69,11 @@ internal sealed class DumpSession
         if (_snapshotKey.WasPressed()) _snapshots.Take(DateTime.Now);
     }
 
-    public void TickSnapshot(float now) => _snapshots.Tick(DateTime.Now);
+    /// <summary>DateTime.Now reads the time zone, so it is read only while a snapshot is waiting.</summary>
+    public void TickSnapshot(float now)
+    {
+        if (_snapshots.IsWaiting) _snapshots.Tick(DateTime.Now);
+    }
 
     /// <summary>
     /// The game's config load is over: ConfigManager's load (its _Initialize state machine) fills the tables, then the

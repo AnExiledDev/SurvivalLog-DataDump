@@ -22,11 +22,13 @@ public sealed class CaptureBook
 {
     private readonly Dictionary<string, CaptureResult> _results = new(StringComparer.Ordinal);
     private readonly DateTime _deadline;
+    private int _pendingCount;
 
     public CaptureBook(IEnumerable<string> pages, DateTime deadline)
     {
         foreach (var page in pages) _results[page] = new CaptureResult(CaptureState.Pending, "");
 
+        _pendingCount = _results.Count;
         _deadline = deadline;
     }
 
@@ -39,10 +41,13 @@ public sealed class CaptureBook
 
         _results[page] = result;
 
+        if (result.State != CaptureState.Pending) _pendingCount--;
+
         return true;
     }
 
-    public bool IsDue(DateTime now) => !IsClosed && (now >= _deadline || _results.Values.All(result => result.State != CaptureState.Pending));
+    /// <summary>Asked every frame while a snapshot waits, so it reads a count instead of walking the pages.</summary>
+    public bool IsDue(DateTime now) => !IsClosed && (now >= _deadline || _pendingCount == 0);
 
     /// <summary>Closes the book; pages still waiting are marked timed out.</summary>
     public SortedDictionary<string, CaptureResult> Close()

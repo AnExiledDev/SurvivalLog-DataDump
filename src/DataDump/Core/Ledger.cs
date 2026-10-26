@@ -71,6 +71,9 @@ public sealed class LedgerBook
         return dropped;
     }
 
+    /// <summary>Whether any action is open; while none is, a world change has nothing to drop.</summary>
+    public bool HasOpen => _open.Count > 0;
+
     /// <summary>The action id open for the character, so a caller can skip sampling an end that matches nothing.</summary>
     public int? OpenActionOf(long agentId) => _open.TryGetValue(agentId, out var start) ? start.ActionId : null;
 

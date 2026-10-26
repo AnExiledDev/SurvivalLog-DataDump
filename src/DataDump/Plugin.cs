@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
@@ -13,7 +14,10 @@ namespace DataDump;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.datadump";
-    private const string Version = "0.3.4";
+    private const string Version = "0.3.5";
+
+    /// <summary>How long quitting waits for the files still being written.</summary>
+    private static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(3);
 
     public override void Load()
     {
@@ -69,23 +73,31 @@ public sealed class Plugin : BasePlugin
 
         if (!isEnabled) return;
 
+        var worker = log.Worker;
+
         PatchKit.Log = log.Write;
         DumpTicker.Log = log.Write;
+        DumpTicker.OnQuit = () => worker.Finish(QuitWait);
+
+        // First, so the lines other threads left and this frame's key state are there for every check after them.
+        DumpTicker.Checks.Add(log.Drain);
+        DumpTicker.Checks.Add(CtrlHotkey.ReadFrame);
+        TableDumper.WarmUp(worker);
 
         var harmony = new Harmony(Guid);
 
-        if (isLedgerOn && ActionLedger.Apply(harmony, folder, log.Write)) DumpTicker.Checks.Add(ActionLedger.Tick);
-        if (isLootLedgerOn && LootLedger.Apply(harmony, folder, log.Write)) DumpTicker.Checks.Add(LootLedger.Tick);
+        if (isLedgerOn && ActionLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(ActionLedger.Tick);
+        if (isLootLedgerOn && LootLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(LootLedger.Tick);
         if (isBundleExportOn) BundleExport.Start(Paths.GameDataPath, folder, bundleFilter, log.Write);
         if (areMapsOn) WatchMaps(folder, isAutoPictures, isDaylight, pictureKey, pixelsPerMeter, cutHeight, log);
 
-        var health = new ModHealthProbe(log.Write);
+        var health = new ModHealthProbe(log.Write, worker);
         var dumpHotkey = new CtrlHotkey(dumpKey.Value, log.Write);
         var snapshotHotkey = new CtrlHotkey(snapshotKey.Value, log.Write);
         var session = new DumpSession(
-            new TableDumper(folder, $"Data Dump {Version}", log.Write),
+            new TableDumper(folder, $"Data Dump {Version}", log.Write, worker),
             health,
-            new SnapshotTaker(Path.Combine(folder, "snapshots"), health, folder, log.Write),
+            new SnapshotTaker(Path.Combine(folder, "snapshots"), health, folder, log.Write, worker),
             dumpHotkey,
             snapshotHotkey,
             folder);
@@ -106,8 +118,8 @@ public sealed class Plugin : BasePlugin
     private static void WatchMaps(string folder, bool isAutoPictures, bool isDaylight, ConfigEntry<KeyCode> pictureKey, float pixelsPerMeter, float cutHeight, DumpLog log)
     {
         var pictureHotkey = new CtrlHotkey(pictureKey.Value, log.Write);
-        var capture = new MapCapture(Path.Combine(folder, MapWatcher.MapsFolder), pixelsPerMeter, cutHeight, isAutoPictures, pictureHotkey, new Daylight(isDaylight, log.Write), log.Write);
-        var watcher = new MapWatcher(folder, log.Write);
+        var capture = new MapCapture(Path.Combine(folder, MapWatcher.MapsFolder), pixelsPerMeter, cutHeight, isAutoPictures, pictureHotkey, new Daylight(isDaylight, log.Write), log.Write, log.Worker);
+        var watcher = new MapWatcher(folder, log.Write, log.Worker);
 
         WatchKey(pictureKey, pictureHotkey, "map picture key", log);
 

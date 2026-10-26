@@ -33,7 +33,16 @@ internal abstract class DumpJob
     /// <summary>Set when the game has nothing for this file; the file is then not written.</summary>
     public string? SkipReason { get; protected set; }
 
+    /// <summary>On the main thread, a few steps per frame: everything that reads the game.</summary>
     public abstract IEnumerable<bool> Steps(TextWriter writer);
+
+    /// <summary>
+    /// On the worker, after the steps' text is in the file: the rest of the file, from what the steps kept. Plain .NET
+    /// only, never the game or Unity.
+    /// </summary>
+    public virtual void Finish(TextWriter writer)
+    {
+    }
 }
 
 /// <summary>One config table as JSON lines, one row per step, in the game's own order.</summary>
@@ -76,12 +85,16 @@ internal sealed class TableJob : DumpJob
     }
 }
 
-/// <summary>A language map as one JSON object sorted by key, so two dumps diff line by line.</summary>
+/// <summary>
+/// A language map as one JSON object sorted by key, so two dumps diff line by line. The entries are read from the game
+/// in steps; the sort and the text, tens of thousands of entries, are the worker's (<see cref="LanguageFile"/>).
+/// </summary>
 internal sealed class LanguageJob : DumpJob
 {
     private const int EntriesPerStep = 500;
 
     private readonly Func<object?> _readMap;
+    private readonly List<KeyValuePair<string, string?>> _entries = new();
 
     public LanguageJob(string name, Func<object?> readMap) : base(name, name + ".json", isTable: false) => _readMap = readMap;
 
@@ -96,34 +109,17 @@ internal sealed class LanguageJob : DumpJob
             yield break;
         }
 
-        var entries = new List<KeyValuePair<string, string?>>();
-
         foreach (var pair in Il2CppCollections.Pairs(map))
         {
             if (pair.Key is not string key) continue;
 
-            entries.Add(new KeyValuePair<string, string?>(key, pair.Value as string));
+            _entries.Add(new KeyValuePair<string, string?>(key, pair.Value as string));
 
-            if (entries.Count % EntriesPerStep == 0) yield return true;
+            if (_entries.Count % EntriesPerStep == 0) yield return true;
         }
-
-        entries.Sort((left, right) => string.CompareOrdinal(left.Key, right.Key));
-
-        var shape = FileShape.JsonObject;
-
-        writer.Write(shape.Start);
-
-        foreach (var entry in entries)
-        {
-            writer.Write(shape.Before(Count));
-            writer.Write(FileShape.Entry(entry.Key, entry.Value));
-            Count++;
-
-            if (Count % EntriesPerStep == 0) yield return true;
-        }
-
-        writer.Write(shape.Finish(Count));
     }
+
+    public override void Finish(TextWriter writer) => Count = LanguageFile.Write(writer, _entries);
 }
 
 /// <summary>
@@ -164,6 +160,7 @@ internal sealed class InputJob : DumpJob
 /// <summary>
 /// enums.json: every enum the game's code declares, from the interop assemblies by reflection. Config fields hold plain
 /// numbers, and this names them. A type that cannot be read is left out and counted in the log, not the whole file.
+/// Reflection over thousands of types and no game read, so it is all the worker's.
 /// </summary>
 internal sealed class EnumJob : DumpJob
 {
@@ -174,6 +171,11 @@ internal sealed class EnumJob : DumpJob
     public EnumJob(Action<string> log) : base("enums", "enums.json", isTable: false) => _log = log;
 
     public override IEnumerable<bool> Steps(TextWriter writer)
+    {
+        yield break;
+    }
+
+    public override void Finish(TextWriter writer)
     {
         var types = new List<EnumType>();
         var unreadable = 0;
@@ -188,8 +190,6 @@ internal sealed class EnumJob : DumpJob
         Count = types.Count;
 
         if (unreadable > 0) _log($"enums: {unreadable} enum types could not be read and are not in enums.json");
-
-        yield return true;
     }
 
     /// <summary>The game's own code: HotUpdate (gameplay, where ConfigManager lives) and AOT (startup).</summary>

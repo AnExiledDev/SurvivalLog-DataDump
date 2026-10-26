@@ -160,15 +160,12 @@ public static class MapViews
 
     private static float BoxDistance(MapArea area, WorldPoint min, WorldPoint max)
     {
-        var corners = new[]
-        {
-            Math.Abs(Math.Min(area.Min.X, area.Max.X) - Math.Min(min.X, max.X)),
-            Math.Abs(Math.Max(area.Min.X, area.Max.X) - Math.Max(min.X, max.X)),
-            Math.Abs(Math.Min(area.Min.Z, area.Max.Z) - Math.Min(min.Z, max.Z)),
-            Math.Abs(Math.Max(area.Min.Z, area.Max.Z) - Math.Max(min.Z, max.Z)),
-        };
+        var lowX = Math.Abs(Math.Min(area.Min.X, area.Max.X) - Math.Min(min.X, max.X));
+        var highX = Math.Abs(Math.Max(area.Min.X, area.Max.X) - Math.Max(min.X, max.X));
+        var lowZ = Math.Abs(Math.Min(area.Min.Z, area.Max.Z) - Math.Min(min.Z, max.Z));
+        var highZ = Math.Abs(Math.Max(area.Min.Z, area.Max.Z) - Math.Max(min.Z, max.Z));
 
-        return Math.Max(Math.Max(corners[0], corners[1]), Math.Max(corners[2], corners[3]));
+        return Math.Max(Math.Max(lowX, highX), Math.Max(lowZ, highZ));
     }
 }
 

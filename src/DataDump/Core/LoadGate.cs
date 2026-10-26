@@ -1,3 +1,5 @@
+using System;
+
 namespace DataDump.Core;
 
 /// <summary>
@@ -11,6 +13,18 @@ public sealed class LoadGate
     private bool _hasOpened;
 
     public LoadGate(double settleSeconds) => _settleSeconds = settleSeconds;
+
+    /// <summary>
+    /// For a caller polling every frame: asks <paramref name="isLoaded"/> at most once per <paramref name="every"/>
+    /// interval, and never again once the gate has opened, since each ask reads the game.
+    /// </summary>
+    /// <returns>True exactly once, as <see cref="Poll(bool, double)"/>.</returns>
+    public bool Poll(Func<bool> isLoaded, Every every, double now)
+    {
+        if (_hasOpened || !every.IsDue(now)) return false;
+
+        return Poll(isLoaded(), now);
+    }
 
     /// <returns>True exactly once: the first poll after the load has read as finished for the settle time.</returns>
     public bool Poll(bool isLoaded, double now)

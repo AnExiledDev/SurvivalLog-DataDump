@@ -175,4 +175,33 @@ public class LedgerTests
         Assert.Equal(0, book.EnterWorld(1));
         Assert.Equal(Eat, book.OpenActionOf(Alice));
     }
+
+    // The ticker reads the world only while an action is open; it must see one start and see the last one end.
+    [Fact]
+    public void Has_open_follows_the_open_actions()
+    {
+        var book = new LedgerBook();
+
+        Assert.False(book.HasOpen);
+
+        book.Start(Alice, Started(Eat, 0));
+
+        Assert.True(book.HasOpen);
+
+        book.End(Alice, Eat, At(5), isCancelled: false);
+
+        Assert.False(book.HasOpen);
+    }
+
+    [Fact]
+    public void Has_open_is_false_once_a_save_change_drops_the_open_actions()
+    {
+        var book = new LedgerBook();
+
+        book.EnterWorld(1);
+        book.Start(Alice, Started(Eat, 0));
+        book.EnterWorld(2);
+
+        Assert.False(book.HasOpen);
+    }
 }

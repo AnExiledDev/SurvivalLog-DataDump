@@ -23,10 +23,18 @@ internal sealed class ModHealthProbe
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private readonly Action<string> _log;
+    private readonly SerialWorker _worker;
 
-    public ModHealthProbe(Action<string> log) => _log = log;
+    public ModHealthProbe(Action<string> log, SerialWorker worker)
+    {
+        _log = log;
+        _worker = worker;
+    }
 
-    public void WriteTo(string trigger, params string[] folders)
+    /// <summary>Reads and writes on the worker: every patched method of every mod is a lot of reflection for one frame.</summary>
+    public void Post(string trigger, params string[] folders) => _worker.Post(() => WriteTo(trigger, folders));
+
+    private void WriteTo(string trigger, string[] folders)
     {
         var document = ModHealthReport.Build(Read(trigger));
         var json = ModHealthReport.ToJson(document) + "\n";

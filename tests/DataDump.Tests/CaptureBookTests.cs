@@ -40,6 +40,32 @@ public class CaptureBookTests
         Assert.Equal(new[] { "bag", "root" }, results.Keys);
     }
 
+    // The book counts its waiting pages instead of walking them each frame; an answer that is still pending counts nothing.
+    [Fact]
+    public void A_pending_answer_does_not_make_the_book_due()
+    {
+        var book = new CaptureBook(new[] { "root", "bag" }, Deadline);
+
+        book.Answer("root", Saved);
+        book.Answer("bag", new CaptureResult(CaptureState.Pending, ""));
+
+        Assert.False(book.IsDue(Asked.AddSeconds(1)));
+
+        book.Answer("bag", Saved);
+
+        Assert.True(book.IsDue(Asked.AddSeconds(1)));
+    }
+
+    [Fact]
+    public void A_page_asked_for_twice_is_waited_for_once()
+    {
+        var book = new CaptureBook(new[] { "root", "root" }, Deadline);
+
+        book.Answer("root", Saved);
+
+        Assert.True(book.IsDue(Asked.AddSeconds(1)));
+    }
+
     [Fact]
     public void An_answer_after_closing_is_refused()
     {

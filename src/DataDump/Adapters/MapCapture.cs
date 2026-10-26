@@ -39,13 +39,15 @@ internal sealed class MapCapture
     private readonly CtrlHotkey _key;
     private readonly Daylight _daylight;
     private readonly Action<string> _log;
+    private readonly SerialWorker _worker;
     private readonly ValueWriter _frames = new(new PlainValueReader(), 4, isIndented: true);
     private readonly AutoViews _auto = new();
     private readonly HashSet<string> _givenUpLogged = new(StringComparer.Ordinal);
+    private readonly LastResult<ViewKey, ViewOnScreen> _lastView;
     private MapLayout? _layout;
     private float _nextLook;
 
-    public MapCapture(string mapsFolder, float pixelsPerMeter, float cutHeight, bool isAuto, CtrlHotkey key, Daylight daylight, Action<string> log)
+    public MapCapture(string mapsFolder, float pixelsPerMeter, float cutHeight, bool isAuto, CtrlHotkey key, Daylight daylight, Action<string> log, SerialWorker worker)
     {
         _mapsFolder = mapsFolder;
         _pixelsPerMeter = pixelsPerMeter;
@@ -54,22 +56,24 @@ internal sealed class MapCapture
         _key = key;
         _daylight = daylight;
         _log = log;
+        _worker = worker;
+        _lastView = new LastResult<ViewKey, ViewOnScreen>(WorkOutView);
     }
 
     public void CheckKey(float now)
     {
         if (!_key.WasPressed()) return;
 
-        if (CurrentView() is not { } view)
+        if (CurrentView() is not { } seen)
         {
             _log($"map pictures ({_key.Name}): no location is on view");
 
             return;
         }
 
-        var isGood = Take(view, _key.Name);
+        var isGood = Take(seen.View, _key.Name);
 
-        _auto.Record(view.Key, isGood, now);
+        _auto.Record(seen.Key, isGood, now);
     }
 
     /// <summary>Looks at what the game shows about once a second and takes its pictures once they are due.</summary>
@@ -79,34 +83,45 @@ internal sealed class MapCapture
 
         _nextLook = now + LookEverySeconds;
 
-        var view = CurrentView();
-        var key = view?.Key;
+        var seen = CurrentView();
+        var key = seen?.Key;
 
-        if (view is null || key is null || !_auto.IsDue(key, now)) return;
+        if (seen is null || key is null || !_auto.IsDue(key, now)) return;
 
-        _auto.Record(key, Take(view, "on view"), now);
+        _auto.Record(key, Take(seen.View, "on view"), now);
 
         if (_auto.HasGivenUp(key) && _givenUpLogged.Add(key)) _log($"map pictures of {key} still came out black after {AutoViews.MaxTries} tries; press {_key.Name} there to try again");
     }
 
-    /// <summary>The place the game shows now, or null when no location or camera is there.</summary>
-    private MapView? CurrentView()
+    /// <summary>
+    /// The place the game shows now, or null when no location or camera is there. Worked out again only when the
+    /// location, the floor or the camera's box has changed; the view mostly stays put for minutes.
+    /// </summary>
+    private ViewOnScreen? CurrentView()
     {
         if (MapWatcher.Current() is not { } map || WorldCamera() is not { } camera) return null;
 
         var layout = LayoutOf(map);
         var floorId = camera._appliedFloorGroup > 0 && !camera._appliedAllFloorsVisible ? camera._appliedVisibleFloor : 0;
-        var floorPoint = FloorPointOf(floorId);
         var min = PointOf(camera._minWorldPosition_k__BackingField);
         var max = PointOf(camera._maxWorldPosition_k__BackingField);
+
+        return _lastView.Get(new ViewKey(layout, floorId, min, max));
+    }
+
+    private ViewOnScreen WorkOutView(ViewKey key)
+    {
+        var (layout, floorId, min, max) = (key.Layout, key.FloorId, key.Min, key.Max);
+        var floorPoint = FloorPointOf(floorId);
         var isGameDefault = MapViews.IsGameDefault(min, max);
         var area = (isGameDefault ? null : MapViews.AreaOf(FloorAreaFirst(layout.Areas, floorPoint?.CameraRange), min, max))
                    ?? layout.Areas.Find(candidate => candidate.Name == floorPoint?.CameraRange)
                    ?? (isGameDefault ? MapViews.AroundNodes(layout.Name, layout.Nodes) : null)
                    ?? new MapArea(MapViews.UnknownArea, min, max);
         var cover = MapViews.Cover(area, layout.Areas.Count, layout.Nodes);
+        var view = new MapView(layout.Name, cover, floorId, FloorYOf(layout, floorPoint, cover), MapViews.YawOf(cover, layout.Turns));
 
-        return new MapView(layout.Name, cover, floorId, FloorYOf(layout, floorPoint, cover), MapViews.YawOf(cover, layout.Turns));
+        return new ViewOnScreen(view, view.Key);
     }
 
     /// <summary>
@@ -128,14 +143,19 @@ internal sealed class MapCapture
         return MapFrame.FloorOf(layout.Nodes, cover.Min, cover.Max, cover.Min.Y);
     }
 
-    /// <summary>The floor's MapPoint row, or null for no floor or a row the game does not have.</summary>
+    /// <summary>
+    /// The floor's MapPoint row, or null for no floor or a row the game does not have. Read from the table directly:
+    /// Get_Config_MapPoint writes an error to the game's log for an id it does not have.
+    /// </summary>
     private Config_MapPoint? FloorPointOf(int floorId)
     {
         if (floorId <= 0) return null;
 
         try
         {
-            return GameSingleton.Existing<ConfigManager>()?.Get_Config_MapPoint(floorId);
+            var table = GameSingleton.Existing<ConfigManager>()?._Config_MapPoint_Dict;
+
+            return table is not null && table.TryGetValue(floorId, out var row) ? row : null;
         }
         catch (Exception ex)
         {
@@ -145,10 +165,12 @@ internal sealed class MapCapture
         }
     }
 
+    /// <summary>Read once per location; a new one also drops the view worked out for the last.</summary>
     private MapLayout LayoutOf(Config_Map map)
     {
-        if (_layout is { } layout && layout.Pointer == map.Pointer) return layout;
+        if (_layout is { } layout && layout.Map.Pointer == map.Pointer) return layout;
 
+        _lastView.Clear();
         _layout = MapLayout.Of(map);
 
         return _layout;
@@ -178,10 +200,7 @@ internal sealed class MapCapture
                     continue;
                 }
 
-                Directory.CreateDirectory(folder);
-                File.WriteAllBytes(Path.Combine(folder, shot.FileStem + ".png"), png);
-                File.WriteAllText(Path.Combine(folder, shot.FileStem + ".json"), _frames.Write(FrameDoc.Of(view, shot)) + "\n", Utf8);
-                _log($"map picture {view.Location}/{shot.FileStem} ({trigger}): {shot.Frame.Width}x{shot.Frame.Height}, turned {view.Yaw:0.#} deg, floor {view.FloorId} at {view.FloorY:0.##} m, layers {mask:X}");
+                PostWrite(view, shot, folder, png, trigger, mask);
             }
             catch (Exception ex)
             {
@@ -192,6 +211,23 @@ internal sealed class MapCapture
 
         return isGood;
     }
+
+    /// <summary>The picture and its frame are written on the worker; the render had to be on this frame, the disk does not.</summary>
+    private void PostWrite(MapView view, MapShot shot, string folder, byte[] png, string trigger, int mask) =>
+        _worker.Post(() =>
+        {
+            try
+            {
+                Directory.CreateDirectory(folder);
+                File.WriteAllBytes(Path.Combine(folder, shot.FileStem + ".png"), png);
+                File.WriteAllText(Path.Combine(folder, shot.FileStem + ".json"), _frames.Write(FrameDoc.Of(view, shot)) + "\n", Utf8);
+                _log($"map picture {view.Location}/{shot.FileStem} ({trigger}): {shot.Frame.Width}x{shot.Frame.Height}, turned {view.Yaw:0.#} deg, floor {view.FloorId} at {view.FloorY:0.##} m, layers {mask:X}");
+            }
+            catch (Exception ex)
+            {
+                _log($"map picture {view.Location}/{shot.FileStem} failed: {ex}");
+            }
+        });
 
     /// <summary>
     /// The layers to draw. While a menu is open the game sets its camera's mask to nothing and keeps the real one in
@@ -295,8 +331,40 @@ internal sealed class MapCapture
 
     private static WorldPoint PointOf(Vector3 position) => new(position.x, position.y, position.z);
 
-    /// <summary>What a location's pictures need from its map, read once per location: its camera areas and its nodes.</summary>
-    private sealed record MapLayout(IntPtr Pointer, string Name, List<MapArea> Areas, List<WorldPoint> Nodes, Dictionary<string, WorldPoint> Named, List<(WorldPoint Point, float Yaw)> Turns)
+    /// <summary>A view worked out, with its key built once rather than at every look.</summary>
+    private sealed record ViewOnScreen(MapView View, string Key);
+
+    /// <summary>Everything a view is worked out from. The layout is compared as the same object: one per location.</summary>
+    private readonly struct ViewKey : IEquatable<ViewKey>
+    {
+        public ViewKey(MapLayout layout, int floorId, WorldPoint min, WorldPoint max)
+        {
+            Layout = layout;
+            FloorId = floorId;
+            Min = min;
+            Max = max;
+        }
+
+        public MapLayout Layout { get; }
+
+        public int FloorId { get; }
+
+        public WorldPoint Min { get; }
+
+        public WorldPoint Max { get; }
+
+        public bool Equals(ViewKey other) => ReferenceEquals(Layout, other.Layout) && FloorId == other.FloorId && Min.Equals(other.Min) && Max.Equals(other.Max);
+
+        public override bool Equals(object? obj) => obj is ViewKey other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(FloorId, Min, Max);
+    }
+
+    /// <summary>
+    /// What a location's pictures need from its map, read once per location: its camera areas and its nodes. It holds
+    /// the map it was read from, so the game cannot reuse that map's address for another while it is compared.
+    /// </summary>
+    private sealed record MapLayout(Config_Map Map, string Name, List<MapArea> Areas, List<WorldPoint> Nodes, Dictionary<string, WorldPoint> Named, List<(WorldPoint Point, float Yaw)> Turns)
     {
         public static MapLayout Of(Config_Map map)
         {
@@ -338,7 +406,7 @@ internal sealed class MapCapture
                 }
             }
 
-            return new MapLayout(map.Pointer, string.IsNullOrEmpty(map.Name) ? "unnamed" : map.Name, areas, nodes, named, turns);
+            return new MapLayout(map, string.IsNullOrEmpty(map.Name) ? "unnamed" : map.Name, areas, nodes, named, turns);
         }
 
         /// <summary>The turn about the vertical, in degrees; the game's nodes are only turned that way.</summary>

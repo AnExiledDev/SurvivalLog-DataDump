@@ -42,10 +42,13 @@ internal static class ActionLedger
     private static readonly LedgerQueue Queue = new();
     private static readonly CostWindow Costs = new();
     private static readonly Stopwatch RealClock = Stopwatch.StartNew();
+    private static readonly Every WorldCheck = new(1);
     private static Action<string> _log = _ => { };
+    private static SerialWorker? _worker;
     private static string _path = "";
     private static string _oldPath = "";
     private static bool _isOn;
+    private static volatile bool _isWriting;
 
     /// <summary>A sampled start, kept from PlayAction's prefix to its postfix.</summary>
     private sealed record Starting(long WorldId, long AgentId, ActionStart Start);
@@ -54,9 +57,10 @@ internal static class ActionLedger
     private sealed record Ending(long AgentId, int ActionId);
 
     /// <returns>Whether the hooks are in place; only then does <see cref="Tick"/> have anything to do.</returns>
-    public static bool Apply(Harmony harmony, string folder, Action<string> log)
+    public static bool Apply(Harmony harmony, string folder, Action<string> log, SerialWorker worker)
     {
         _log = log;
+        _worker = worker;
         _path = Path.Combine(folder, FileName);
         _oldPath = Path.Combine(folder, OldFileName);
 
@@ -79,7 +83,7 @@ internal static class ActionLedger
     /// <summary>The ticker's check: drops open actions of a save that was left, writes waiting lines when due, logs the minute's cost.</summary>
     public static void Tick(float now)
     {
-        EnterWorld(WorldIdOf(GameSingleton.Existing<BattleLogicWorld>()));
+        LeaveSaveIfGone(now);
         Flush(now);
 
         string? costs;
@@ -227,6 +231,22 @@ internal static class ActionLedger
     /// </summary>
     private static long? WorldIdOf(BattleLogicWorld? world) => world?._InstanceId_k__BackingField;
 
+    /// <summary>
+    /// Drops the open actions of a save that was left. Only open actions can be dropped, so the world is not read while
+    /// none is; and it is read once a second, not every frame, since each read wraps the world through interop. A start
+    /// or an end in the new world enters it first anyway, so the second's delay only delays the log line.
+    /// </summary>
+    private static void LeaveSaveIfGone(float now)
+    {
+        bool hasOpen;
+
+        lock (Gate) hasOpen = Book.HasOpen;
+
+        if (!hasOpen || !WorldCheck.IsDue(now)) return;
+
+        EnterWorld(GameSingleton.IsCreated<BattleLogicWorld>() ? WorldIdOf(GameSingleton.Existing<BattleLogicWorld>()) : null);
+    }
+
     private static void EnterWorld(long? worldId)
     {
         int dropped;
@@ -249,11 +269,15 @@ internal static class ActionLedger
     }
 
     /// <summary>
-    /// Writes the waiting lines once they are due. A file that cannot be written (open in a program that locks it)
-    /// keeps its lines queued for the next try; the queue's cap bounds how many.
+    /// Hands the waiting lines to the worker once they are due; the lines are built and written there, so the frame
+    /// never waits on the disk. A file that cannot be written (open in a program that locks it) puts its lines back for
+    /// the next try; the queue's cap bounds how many. No batch is taken while the last one is still being written, so a
+    /// batch put back stays ahead of the lines after it.
     /// </summary>
     private static void Flush(float now)
     {
+        if (_isWriting || _worker is not { } worker) return;
+
         LedgerBatch? batch;
 
         lock (Gate) batch = Queue.TakeIfDue(now);
@@ -264,6 +288,16 @@ internal static class ActionLedger
 
         if (batch.Rows.Count == 0) return;
 
+        _isWriting = true;
+        PostWrite(worker, batch);
+    }
+
+    /// <summary>Its own method, so the closure over the batch is made only when there is one, not on every frame's call.</summary>
+    private static void PostWrite(SerialWorker worker, LedgerBatch batch) => worker.Post(() => WriteOrReturn(batch));
+
+    /// <summary>On the worker.</summary>
+    private static void WriteOrReturn(LedgerBatch batch)
+    {
         var startedAt = Stopwatch.GetTimestamp();
 
         try
@@ -279,6 +313,7 @@ internal static class ActionLedger
         finally
         {
             Measure(Flushed, startedAt);
+            _isWriting = false;
         }
     }
 

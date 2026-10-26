@@ -25,17 +25,19 @@ internal static class LootLedger
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     private static readonly object Gate = new();
-    private static readonly List<string> Waiting = new();
+    private static List<LootRoll> _waiting = new();
     private static Action<string> _log = _ => { };
+    private static SerialWorker? _worker;
     private static string _path = "";
     private static double _lastFlush;
     private static int _dropped;
     private static bool _isOn;
 
     /// <returns>Whether the hook is in place; only then does <see cref="Tick"/> have anything to do.</returns>
-    public static bool Apply(Harmony harmony, string folder, Action<string> log)
+    public static bool Apply(Harmony harmony, string folder, Action<string> log, SerialWorker worker)
     {
         _log = log;
+        _worker = worker;
         _path = Path.Combine(folder, FileName);
 
         try
@@ -56,31 +58,44 @@ internal static class LootLedger
         return _isOn;
     }
 
+    /// <summary>Every few seconds, hands the rolls that came in to the worker, which builds their lines and appends them.</summary>
     public static void Tick(float now)
     {
-        if (now - _lastFlush < FlushSeconds) return;
+        if (now - _lastFlush < FlushSeconds || _worker is not { } worker) return;
 
         _lastFlush = now;
 
-        string[] lines;
+        List<LootRoll> rolls;
         int dropped;
 
         lock (Gate)
         {
-            lines = Waiting.ToArray();
+            if (_waiting.Count == 0 && _dropped == 0) return;
+
+            rolls = _waiting;
             dropped = _dropped;
-            Waiting.Clear();
+            _waiting = new List<LootRoll>();
             _dropped = 0;
         }
 
         if (dropped > 0) _log($"loot ledger: {dropped} rolls dropped, too many waiting to be written");
 
-        if (lines.Length == 0) return;
+        if (rolls.Count > 0) PostWrite(worker, rolls);
+    }
 
-        var isNew = !File.Exists(_path);
-        var text = string.Join("\n", lines) + "\n";
+    /// <summary>Its own method, so the closure over the rolls is made only when there are some.</summary>
+    private static void PostWrite(SerialWorker worker, List<LootRoll> rolls) => worker.Post(() => Write(rolls));
 
-        File.AppendAllText(_path, isNew ? LootTsv.Header + "\n" + text : text, Utf8);
+    /// <summary>On the worker.</summary>
+    private static void Write(List<LootRoll> rolls)
+    {
+        var text = new StringBuilder();
+
+        if (!File.Exists(_path)) text.Append(LootTsv.Header).Append('\n');
+
+        foreach (var roll in rolls) text.Append(LootTsv.Line(roll)).Append('\n');
+
+        File.AppendAllText(_path, text.ToString(), Utf8);
     }
 
     private static void AfterRoll(Config_RandomGroup randomGroup, int count, int discoverLv, int guaranteeLv, Il2CppSystem.Collections.Generic.List<int> __result)
@@ -91,14 +106,11 @@ internal static class LootLedger
         {
             var items = new List<int>(__result?.Count ?? 0);
 
-            if (__result != null)
-            {
-                foreach (var item in __result) items.Add(item);
-            }
+            // By index: an Il2Cpp foreach wraps a game enumerator per roll.
+            for (var i = 0; __result != null && i < __result.Count; i++) items.Add(__result[i]);
 
-            var roll = new LootRoll(DateTime.Now, MapName(), randomGroup._ID_k__BackingField, count, discoverLv, guaranteeLv, items);
-
-            Add(LootTsv.Line(roll));
+            // The line is built on the worker at the next write, not inside the game's call.
+            Add(new LootRoll(DateTime.Now, MapName(), randomGroup._ID_k__BackingField, count, discoverLv, guaranteeLv, items));
         }
         catch (Exception ex)
         {
@@ -113,12 +125,12 @@ internal static class LootLedger
         return map?.Name ?? "";
     }
 
-    private static void Add(string line)
+    private static void Add(LootRoll roll)
     {
         lock (Gate)
         {
-            if (Waiting.Count >= MaxWaiting) _dropped++;
-            else Waiting.Add(line);
+            if (_waiting.Count >= MaxWaiting) _dropped++;
+            else _waiting.Add(roll);
         }
     }
 }

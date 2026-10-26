@@ -12,43 +12,55 @@ using UnityEngine;
 namespace DataDump.Adapters;
 
 /// <summary>
-/// Writes every config table, both language maps and the hotkeys to the dump folder, then manifest.json. The work is
-/// spread over frames on the main thread, a few milliseconds each. Each file is written beside its final name and
-/// moved there when it is complete, so a file that failed half way is never left looking whole; a file that fails is
-/// deleted, logged and listed in the manifest, and the next file goes on.
+/// Writes every config table, both language maps and the hotkeys to the dump folder, then manifest.json. The game is
+/// read on the main thread, spread over frames, about 2 milliseconds each, into text in memory; each finished file is
+/// handed to the worker, which writes it beside its final name and moves it there, so a file that failed half way is
+/// never left looking whole. A file that fails is deleted, logged and listed in the manifest, and the next file goes on.
+/// The worker also keeps the run's outcomes and writes the manifest after the last file, so the outcomes are only ever
+/// touched by one thread.
 /// </summary>
 internal sealed class TableDumper
 {
     public const string ManifestFile = "manifest.json";
 
-    private const double FrameBudgetMilliseconds = 6;
+    private const double FrameBudgetMilliseconds = 2;
     private const string PartSuffix = ".part";
     private const string TablePrefix = "_Config_";
     private const string TableSuffix = "_Dict";
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static readonly long FrameBudgetTicks = (long)(Stopwatch.Frequency * FrameBudgetMilliseconds / 1000);
+
+    /// <summary>ConfigManager's tables by reflection: a few hundred properties, looked up once, on the worker at load.</summary>
+    private static readonly Lazy<IReadOnlyList<Table>> Tables = new(FindTables);
 
     private readonly string _folder;
     private readonly string _plugin;
     private readonly Action<string> _log;
+    private readonly SerialWorker _worker;
     private Run? _run;
 
-    public TableDumper(string folder, string plugin, Action<string> log)
+    public TableDumper(string folder, string plugin, Action<string> log, SerialWorker worker)
     {
         _folder = folder;
         _plugin = plugin;
         _log = log;
+        _worker = worker;
     }
 
     public bool IsRunning => _run is not null;
 
+    /// <param name="UnkeyedReason">Why its rows are not written, for a table keyed by something other than one id.</param>
+    private sealed record Table(PropertyInfo Property, string Name, string? UnkeyedReason);
+
     private sealed class Run
     {
-        public Run(string trigger, DateTimeOffset startedAt, string? language, Queue<DumpJob> jobs, List<DumpOutcome> tables)
+        public Run(string trigger, DateTimeOffset startedAt, string? language, string? gameVersion, Queue<DumpJob> jobs, List<DumpOutcome> tables)
         {
             Trigger = trigger;
             StartedAt = startedAt;
             Language = language;
+            GameVersion = gameVersion;
             Jobs = jobs;
             Tables = tables;
         }
@@ -59,16 +71,24 @@ internal sealed class TableDumper
 
         public string? Language { get; }
 
+        public string? GameVersion { get; }
+
         public Queue<DumpJob> Jobs { get; }
 
+        /// <summary>Touched by the worker only, once the run has started.</summary>
         public List<DumpOutcome> Tables { get; }
 
+        /// <summary>Touched by the worker only.</summary>
         public List<DumpOutcome> Files { get; } = new();
 
-        public Writing? Current { get; set; }
+        public Reading? Current { get; set; }
     }
 
-    private sealed record Writing(DumpJob Job, StreamWriter Writer, IEnumerator<bool> Steps, string PartPath);
+    /// <summary>A file being read from the game, its text so far, and the steps left.</summary>
+    private sealed record Reading(DumpJob Job, StringWriter Text, IEnumerator<bool> Steps);
+
+    /// <summary>Looks up the tables on the worker, so the first dump does not pay for the reflection on the game's frame.</summary>
+    public static void WarmUp(SerialWorker worker) => worker.Post(() => _ = Tables.Value);
 
     /// <summary>Starts a dump; false, with a log line, while one is running or before the game has made its configs.</summary>
     public bool Start(string trigger)
@@ -89,18 +109,24 @@ internal sealed class TableDumper
             return false;
         }
 
-        Directory.CreateDirectory(_folder);
+        PostCreateFolder();
 
         var rows = new RowWriter(new Il2CppValueReader());
         var tables = new List<DumpOutcome>();
         var jobs = new Queue<DumpJob>();
+        var tableCount = 0;
 
-        foreach (var table in TableProperties())
+        foreach (var table in Tables.Value)
         {
-            var name = TableName(table);
+            if (table.UnkeyedReason is { } reason)
+            {
+                tables.Add(new DumpSkipped(table.Name, reason));
 
-            if (UnkeyedReason(table) is { } reason) tables.Add(new DumpSkipped(name, reason));
-            else jobs.Enqueue(new TableJob(name, () => table.GetValue(configs), rows));
+                continue;
+            }
+
+            jobs.Enqueue(TableJobOf(table.Name, table.Property, configs, rows));
+            tableCount++;
         }
 
         jobs.Enqueue(new LanguageJob("lang-zh", () => configs.customCache?.ChineseLanguageMap));
@@ -108,20 +134,20 @@ internal sealed class TableDumper
         jobs.Enqueue(new InputJob());
         jobs.Enqueue(new EnumJob(_log));
 
-        _run = new Run(trigger, DateTimeOffset.Now, LanguageOf(configs), jobs, tables);
-        _log($"dump ({trigger}) started: {jobs.Count(job => job.IsTable)} tables to {_folder}");
+        _run = new Run(trigger, DateTimeOffset.Now, LanguageOf(configs), GameVersion(), jobs, tables);
+        _log($"dump ({trigger}) started: {tableCount} tables to {_folder}");
 
         return true;
     }
 
-    /// <summary>Writes for one frame's budget. Never throws: every game read happens inside a job step.</summary>
+    /// <summary>Reads for one frame's budget. Never throws: every game read happens inside a job step.</summary>
     public void Tick()
     {
         if (_run is not { } run) return;
 
-        var clock = Stopwatch.StartNew();
+        var stopAt = Stopwatch.GetTimestamp() + FrameBudgetTicks;
 
-        while (clock.Elapsed.TotalMilliseconds < FrameBudgetMilliseconds)
+        while (Stopwatch.GetTimestamp() < stopAt)
         {
             if (run.Current is null)
             {
@@ -141,12 +167,18 @@ internal sealed class TableDumper
         }
     }
 
+    /// <summary>Its own method, so each table's reader closes over its own property.</summary>
+    private static TableJob TableJobOf(string name, PropertyInfo property, ConfigManager configs, RowWriter rows) =>
+        new(name, () => property.GetValue(configs), rows);
+
     /// <summary>Every ConfigManager table: a _Config_X_Dict member, by name so two dumps list tables the same way.</summary>
-    private static IEnumerable<PropertyInfo> TableProperties() =>
+    private static IReadOnlyList<Table> FindTables() =>
         typeof(ConfigManager).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(property => property.Name.StartsWith(TablePrefix, StringComparison.Ordinal) && property.Name.EndsWith(TableSuffix, StringComparison.Ordinal))
             .Where(property => property.GetIndexParameters().Length == 0)
-            .OrderBy(property => property.Name, StringComparer.Ordinal);
+            .OrderBy(property => property.Name, StringComparer.Ordinal)
+            .Select(property => new Table(property, TableName(property), UnkeyedReason(property)))
+            .ToList();
 
     /// <summary>_Config_Action_Dict is the table Config_Action.</summary>
     private static string TableName(PropertyInfo table) => table.Name[1..^TableSuffix.Length];
@@ -179,80 +211,92 @@ internal sealed class TableDumper
         }
     }
 
-    private void Open(Run run, DumpJob job)
+    private static void Open(Run run, DumpJob job)
     {
+        var text = new StringWriter();
+
+        run.Current = new Reading(job, text, job.Steps(text).GetEnumerator());
+    }
+
+    private void Step(Run run, Reading reading)
+    {
+        try
+        {
+            if (reading.Steps.MoveNext()) return;
+
+            reading.Steps.Dispose();
+            run.Current = null;
+            PostComplete(run, reading);
+        }
+        catch (Exception ex)
+        {
+            run.Current = null;
+            DisposeQuietly(reading.Steps);
+            PostAbandon(run, reading.Job, ProblemList.Reason(ex));
+            _log($"dump: {reading.Job.Name} failed after {reading.Job.Count} items and was not written: {ex}");
+        }
+    }
+
+    private void PostCreateFolder() => _worker.Post(() => Directory.CreateDirectory(_folder));
+
+    private void PostComplete(Run run, Reading reading) => _worker.Post(() => Complete(run, reading));
+
+    private void PostAbandon(Run run, DumpJob job, string reason) => _worker.Post(() => Abandon(run, job, reason));
+
+    /// <summary>On the worker: the job's last text, the file, the move to its final name, the outcome.</summary>
+    private void Complete(Run run, Reading reading)
+    {
+        var job = reading.Job;
         var partPath = Path.Combine(_folder, job.FileName + PartSuffix);
-
-        try
-        {
-            var writer = new StreamWriter(partPath, append: false, Utf8);
-
-            run.Current = new Writing(job, writer, job.Steps(writer).GetEnumerator(), partPath);
-        }
-        catch (Exception ex)
-        {
-            Record(run, job, new DumpFailed(job.Name, ProblemList.Reason(ex)));
-            _log($"dump: could not open {job.FileName}: {ProblemList.Reason(ex)}");
-        }
-    }
-
-    private void Step(Run run, Writing writing)
-    {
-        try
-        {
-            if (writing.Steps.MoveNext()) return;
-
-            Close(writing);
-            run.Current = null;
-            Complete(run, writing);
-        }
-        catch (Exception ex)
-        {
-            run.Current = null;
-            Abandon(writing);
-            Record(run, writing.Job, new DumpFailed(writing.Job.Name, ProblemList.Reason(ex)));
-            _log($"dump: {writing.Job.Name} failed after {writing.Job.Count} items and was not written: {ex}");
-        }
-    }
-
-    private void Complete(Run run, Writing writing)
-    {
-        var job = writing.Job;
         var finalPath = Path.Combine(_folder, job.FileName);
 
         if (job.SkipReason is { } reason)
         {
-            DeleteQuietly(writing.PartPath);
+            DeleteQuietly(partPath);
             DeleteQuietly(finalPath);
             Record(run, job, new DumpSkipped(job.Name, reason));
 
             return;
         }
 
-        File.Move(writing.PartPath, finalPath, overwrite: true);
-        Record(run, job, new Dumped(job.Name, job.Count));
-    }
+        StreamWriter file;
 
-    /// <summary>A failed file is removed with its last good copy, so no file in the folder disagrees with the manifest.</summary>
-    private void Abandon(Writing writing)
-    {
         try
         {
-            Close(writing);
+            file = new StreamWriter(partPath, append: false, Utf8);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // The file is deleted next; a writer that will not close changes nothing about that.
+            Record(run, job, new DumpFailed(job.Name, ProblemList.Reason(ex)));
+            _log($"dump: could not open {job.FileName}: {ProblemList.Reason(ex)}");
+
+            return;
         }
 
-        DeleteQuietly(writing.PartPath);
-        DeleteQuietly(Path.Combine(_folder, writing.Job.FileName));
+        try
+        {
+            using (file)
+            {
+                file.Write(reading.Text.GetStringBuilder());
+                job.Finish(file);
+            }
+
+            File.Move(partPath, finalPath, overwrite: true);
+            Record(run, job, new Dumped(job.Name, job.Count));
+        }
+        catch (Exception ex)
+        {
+            Abandon(run, job, ProblemList.Reason(ex));
+            _log($"dump: {job.Name} failed after {job.Count} items and was not written: {ex}");
+        }
     }
 
-    private static void Close(Writing writing)
+    /// <summary>On the worker. A failed file is removed with its last good copy, so no file in the folder disagrees with the manifest.</summary>
+    private void Abandon(Run run, DumpJob job, string reason)
     {
-        writing.Steps.Dispose();
-        writing.Writer.Dispose();
+        DeleteQuietly(Path.Combine(_folder, job.FileName + PartSuffix));
+        DeleteQuietly(Path.Combine(_folder, job.FileName));
+        Record(run, job, new DumpFailed(job.Name, reason));
     }
 
     private static void Record(Run run, DumpJob job, DumpOutcome outcome)
@@ -261,11 +305,19 @@ internal sealed class TableDumper
         else run.Files.Add(outcome);
     }
 
+    /// <summary>The run is over on the main thread; the worker writes the manifest once every file before it is done.</summary>
     private void Finish(Run run)
     {
         _run = null;
+        PostManifest(run);
+    }
 
-        var input = new ManifestInput(_plugin, GameVersion(), run.Trigger, run.StartedAt, DateTimeOffset.Now, run.Language, run.Tables, run.Files);
+    private void PostManifest(Run run) => _worker.Post(() => WriteManifest(run));
+
+    /// <summary>On the worker, after every file of the run.</summary>
+    private void WriteManifest(Run run)
+    {
+        var input = new ManifestInput(_plugin, run.GameVersion, run.Trigger, run.StartedAt, DateTimeOffset.Now, run.Language, run.Tables, run.Files);
         Manifest.Document manifest;
 
         try
@@ -300,6 +352,7 @@ internal sealed class TableDumper
     private static string FailureList(Run run) =>
         string.Join("; ", run.Tables.Concat(run.Files).OfType<DumpFailed>().Select(failed => failed.Name + ": " + failed.Reason));
 
+    /// <summary>On the main thread: Unity answers only there.</summary>
     private static string? GameVersion()
     {
         try
@@ -312,6 +365,17 @@ internal sealed class TableDumper
         }
     }
 
+    private static void DisposeQuietly(IDisposable steps)
+    {
+        try
+        {
+            steps.Dispose();
+        }
+        catch (Exception)
+        {
+            // The file is not written either way.
+        }
+    }
 
     private static void DeleteQuietly(string path)
     {

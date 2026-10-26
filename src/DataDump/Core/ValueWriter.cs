@@ -53,6 +53,17 @@ public sealed class ValueWriter
         return text.ToString();
     }
 
+    /// <summary>
+    /// Writes <paramref name="view"/> into <paramref name="text"/> a part at a time, for a caller that spreads a large
+    /// value over frames: a step ends after each member, item or pair shallower than <paramref name="sliceDepth"/>,
+    /// and anything at that depth or deeper is written whole within its step. Once every step has run, the text is
+    /// the same as <see cref="WriteView"/>'s.
+    /// </summary>
+    public IEnumerable<bool> WriteViewSteps(StringBuilder text, ValueView view, int sliceDepth) => ViewSteps(text, view, 0, sliceDepth);
+
+    /// <summary>As <see cref="WriteViewSteps"/>, for any value; the finished text is the same as <see cref="Write"/>'s.</summary>
+    public IEnumerable<bool> WriteSteps(StringBuilder text, object? value, int sliceDepth) => ValueSteps(text, value, 0, sliceDepth);
+
     /// <summary>The text an exception is written as, with reflection's wrapper taken off.</summary>
     public static string ErrorText(Exception ex)
     {
@@ -211,6 +222,259 @@ public sealed class ValueWriter
         }
 
         Append(text, value, depth);
+    }
+
+    // The steps below mirror Append, AppendView, AppendItems, AppendPairs, AppendRecord and AppendMember one for one.
+    // An iterator cannot yield inside a try that has a catch, so the enumeration a catch guards there is done here by
+    // hand, through Begin, Next and End, and a failure ends the loop the way the catch does.
+
+    private IEnumerable<bool> ValueSteps(StringBuilder text, object? value, int depth, int sliceDepth)
+    {
+        if (depth >= sliceDepth)
+        {
+            Append(text, value, depth);
+
+            yield break;
+        }
+
+        if (DescribeOrWriteError(text, value) is not { } view) yield break;
+
+        foreach (var step in ViewSteps(text, view, depth, sliceDepth)) yield return step;
+    }
+
+    private IEnumerable<bool> ViewSteps(StringBuilder text, ValueView view, int depth, int sliceDepth)
+    {
+        switch (view)
+        {
+            case ItemsView items:
+                return ItemsSteps(text, items.Items, depth, sliceDepth);
+            case PairsView pairs:
+                return PairsSteps(text, pairs.Pairs, depth, sliceDepth);
+            case RecordView record:
+                return RecordSteps(text, record, depth, sliceDepth);
+            default:
+                AppendView(text, view, depth);
+
+                return Array.Empty<bool>();
+        }
+    }
+
+    private IEnumerable<bool> ItemsSteps(StringBuilder text, IEnumerable<object?> items, int depth, int sliceDepth)
+    {
+        if (depth >= _maxDepth)
+        {
+            JsonText.AppendQuoted(text, DepthLimitText);
+
+            yield break;
+        }
+
+        var count = 0;
+
+        text.Append('[');
+
+        var failure = Begin(items, out var each);
+
+        try
+        {
+            while (each is not null && failure is null && Next(each, out var item, out failure))
+            {
+                AppendSeparator(text, count++, depth + 1);
+
+                using var child = ValueSteps(text, item, depth + 1, sliceDepth).GetEnumerator();
+
+                while (Next(child, out _, out failure)) yield return true;
+
+                if (failure is null) yield return true;
+            }
+
+            failure ??= End(each);
+            each = null;
+        }
+        finally
+        {
+            End(each);
+        }
+
+        if (failure is not null)
+        {
+            AppendSeparator(text, count++, depth + 1);
+            JsonText.AppendQuoted(text, ErrorText(failure));
+        }
+
+        Close(text, ']', count, depth);
+    }
+
+    private IEnumerable<bool> PairsSteps(StringBuilder text, IEnumerable<KeyValuePair<object?, object?>> pairs, int depth, int sliceDepth)
+    {
+        if (depth >= _maxDepth)
+        {
+            JsonText.AppendQuoted(text, DepthLimitText);
+
+            yield break;
+        }
+
+        var count = 0;
+
+        text.Append('{');
+
+        var failure = Begin(pairs, out var each);
+
+        try
+        {
+            while (each is not null && failure is null && Next(each, out var pair, out failure))
+            {
+                AppendSeparator(text, count++, depth + 1);
+
+                using var child = KeyThenValueSteps(text, pair, depth + 1, sliceDepth).GetEnumerator();
+
+                while (Next(child, out _, out failure)) yield return true;
+
+                if (failure is null) yield return true;
+            }
+
+            failure ??= End(each);
+            each = null;
+        }
+        finally
+        {
+            End(each);
+        }
+
+        if (failure is not null)
+        {
+            AppendSeparator(text, count++, depth + 1);
+            AppendKey(text, "!error");
+            JsonText.AppendQuoted(text, ErrorText(failure));
+        }
+
+        Close(text, '}', count, depth);
+    }
+
+    /// <summary>A pair's key and value, in one step sequence so a failure in either ends the pairs as AppendPairs' catch does.</summary>
+    private IEnumerable<bool> KeyThenValueSteps(StringBuilder text, KeyValuePair<object?, object?> pair, int depth, int sliceDepth)
+    {
+        AppendKey(text, KeyText(pair.Key));
+
+        foreach (var step in ValueSteps(text, pair.Value, depth, sliceDepth)) yield return step;
+    }
+
+    private IEnumerable<bool> RecordSteps(StringBuilder text, RecordView record, int depth, int sliceDepth)
+    {
+        if (_isNestedIdOnly && depth > 0 && record.Id is not null)
+        {
+            AppendLeaf(text, record.Id);
+
+            yield break;
+        }
+
+        if (depth >= _maxDepth)
+        {
+            JsonText.AppendQuoted(text, record.TypeName);
+
+            yield break;
+        }
+
+        var count = 0;
+
+        text.Append('{');
+
+        foreach (var member in record.Members)
+        {
+            AppendSeparator(text, count++, depth + 1);
+            AppendKey(text, member.Name);
+
+            foreach (var step in MemberSteps(text, member, depth + 1, sliceDepth)) yield return step;
+
+            yield return true;
+        }
+
+        Close(text, '}', count, depth);
+    }
+
+    private IEnumerable<bool> MemberSteps(StringBuilder text, MemberView member, int depth, int sliceDepth)
+    {
+        object? value;
+
+        try
+        {
+            value = member.Read();
+        }
+        catch (Exception ex)
+        {
+            JsonText.AppendQuoted(text, ErrorText(ex));
+
+            return Array.Empty<bool>();
+        }
+
+        return ValueSteps(text, value, depth, sliceDepth);
+    }
+
+    private ValueView? DescribeOrWriteError(StringBuilder text, object? value)
+    {
+        try
+        {
+            return _reader.Describe(value);
+        }
+        catch (Exception ex)
+        {
+            JsonText.AppendQuoted(text, ErrorText(ex));
+
+            return null;
+        }
+    }
+
+    private static Exception? Begin<T>(IEnumerable<T> items, out IEnumerator<T>? each)
+    {
+        try
+        {
+            each = items.GetEnumerator();
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            each = null;
+
+            return ex;
+        }
+    }
+
+    /// <returns>True with the next element; false at the end, or with <paramref name="failure"/> set when moving on threw.</returns>
+    private static bool Next<T>(IEnumerator<T> each, out T current, out Exception? failure)
+    {
+        failure = null;
+
+        try
+        {
+            if (each.MoveNext())
+            {
+                current = each.Current;
+
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+
+        current = default!;
+
+        return false;
+    }
+
+    private static Exception? End<T>(IEnumerator<T>? each)
+    {
+        try
+        {
+            each?.Dispose();
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
     }
 
     /// <summary>A dictionary key as text: leaves as their invariant text, enums as names, objects as their id or type.</summary>

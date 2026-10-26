@@ -20,11 +20,27 @@ internal static class LogTails
 
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
-    public static void CopyTo(string folder, Action<string> log)
+    /// <summary>On the main thread, where Unity answers: the game's Player.log, or null with a log line.</summary>
+    public static string? PlayerLogPath(Action<string> log)
+    {
+        try
+        {
+            return Application.consoleLogPath;
+        }
+        catch (Exception ex)
+        {
+            log("snapshot: could not find the game's Player.log: " + ProblemList.Reason(ex));
+
+            return null;
+        }
+    }
+
+    /// <summary>File work only, so it can run on the worker.</summary>
+    public static void CopyTo(string folder, string? playerLog, Action<string> log)
     {
         Directory.CreateDirectory(folder);
 
-        foreach (var path in Sources(log))
+        foreach (var path in Sources(playerLog, log))
         {
             var name = FileNames.Safe(Path.GetFileName(path));
 
@@ -41,7 +57,7 @@ internal static class LogTails
         }
     }
 
-    private static IEnumerable<string> Sources(Action<string> log)
+    private static IEnumerable<string> Sources(string? playerLog, Action<string> log)
     {
         var paths = new List<string>();
 
@@ -54,16 +70,7 @@ internal static class LogTails
             log("snapshot: could not list the BepInEx logs: " + ProblemList.Reason(ex));
         }
 
-        try
-        {
-            var playerLog = Application.consoleLogPath;
-
-            if (!string.IsNullOrEmpty(playerLog) && File.Exists(playerLog)) paths.Add(playerLog);
-        }
-        catch (Exception ex)
-        {
-            log("snapshot: could not find the game's Player.log: " + ProblemList.Reason(ex));
-        }
+        if (!string.IsNullOrEmpty(playerLog) && File.Exists(playerLog)) paths.Add(playerLog);
 
         return paths;
     }

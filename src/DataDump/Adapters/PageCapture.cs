@@ -33,17 +33,21 @@ internal sealed class PageCapture
     private readonly string _folder;
     private readonly CaptureBook _book;
     private readonly ConcurrentQueue<KeyValuePair<string, string?>> _replies = new();
+    private readonly ConcurrentQueue<KeyValuePair<string, CaptureResult>> _saved = new();
     private readonly Action<string> _log;
+    private readonly SerialWorker _worker;
+    private int _savesUnderWay;
 
-    private PageCapture(string folder, IEnumerable<string> pages, DateTime now, Action<string> log)
+    private PageCapture(string folder, IEnumerable<string> pages, DateTime now, Action<string> log, SerialWorker worker)
     {
         _folder = folder;
         _book = new CaptureBook(pages, now + Wait);
         _log = log;
+        _worker = worker;
     }
 
     /// <returns>The capture under way; null, with a log line, when the game has no web view to ask.</returns>
-    public static PageCapture? Start(string folder, WebUILayer? layer, IReadOnlyList<OpenPage> pages, DateTime now, Action<string> log)
+    public static PageCapture? Start(string folder, WebUILayer? layer, IReadOnlyList<OpenPage> pages, DateTime now, Action<string> log, SerialWorker worker)
     {
         var webView = layer?.canvasWebViewPrefab?.WebView;
 
@@ -55,7 +59,7 @@ internal sealed class PageCapture
         }
 
         var names = new[] { RootPage }.Concat(pages.Select(page => page.Key)).Distinct(StringComparer.Ordinal).ToList();
-        var capture = new PageCapture(folder, names, now, log);
+        var capture = new PageCapture(folder, names, now, log, worker);
 
         foreach (var name in names)
         {
@@ -72,20 +76,42 @@ internal sealed class PageCapture
         return capture;
     }
 
-    /// <returns>True once the capture is over and page-capture.json is written.</returns>
+    /// <summary>
+    /// Hands each reply's HTML to the worker and books each file it saved. The capture waits past its deadline only for
+    /// a reply that came in before it and is still being written, as it did when the write was made here.
+    /// </summary>
+    /// <returns>True once the capture is over; page-capture.json follows on the worker.</returns>
     public bool Tick(DateTime now)
     {
-        while (_replies.TryDequeue(out var reply)) _book.Answer(reply.Key, Save(reply.Key, reply.Value));
+        while (_replies.TryDequeue(out var reply)) Accept(reply.Key, reply.Value);
 
-        if (!_book.IsDue(now)) return false;
+        while (_saved.TryDequeue(out var saved))
+        {
+            _book.Answer(saved.Key, saved.Value);
+            _savesUnderWay--;
+        }
 
-        var results = _book.Close();
+        if (_savesUnderWay > 0 || !_book.IsDue(now)) return false;
 
-        WriteResults(results);
-        _log($"snapshot pages: {results.Values.Count(result => result.State == CaptureState.Saved)} of {results.Count} saved ({_folder})");
+        PostResults(_book.Close());
 
         return true;
     }
+
+    private void Accept(string page, string? reply)
+    {
+        if (reply is null || !reply.StartsWith(HtmlMarker, StringComparison.Ordinal))
+        {
+            _book.Answer(page, new CaptureResult(CaptureState.Failed, Shorten(reply ?? "no reply")));
+
+            return;
+        }
+
+        _savesUnderWay++;
+        _worker.Post(() => _saved.Enqueue(new KeyValuePair<string, CaptureResult>(page, Save(page, reply))));
+    }
+
+    private void PostResults(SortedDictionary<string, CaptureResult> results) => _worker.Post(() => WriteResults(results));
 
     private static string FileNameOf(string page) => page == RootPage ? "root.html" : "page-" + FileNames.Safe(page) + ".html";
 
@@ -104,10 +130,9 @@ internal sealed class PageCapture
                "}catch(e){return 'error: '+e;}})()";
     }
 
-    private CaptureResult Save(string page, string? reply)
+    /// <summary>On the worker: a reply that holds the page's HTML.</summary>
+    private CaptureResult Save(string page, string reply)
     {
-        if (reply is null || !reply.StartsWith(HtmlMarker, StringComparison.Ordinal)) return new CaptureResult(CaptureState.Failed, Shorten(reply ?? "no reply"));
-
         var fileName = FileNameOf(page);
 
         try
@@ -122,6 +147,7 @@ internal sealed class PageCapture
         }
     }
 
+    /// <summary>On the worker.</summary>
     private void WriteResults(SortedDictionary<string, CaptureResult> results)
     {
         try
@@ -132,6 +158,8 @@ internal sealed class PageCapture
         {
             _log("snapshot: could not write " + ResultFile + ": " + ProblemList.Reason(ex));
         }
+
+        _log($"snapshot pages: {results.Values.Count(result => result.State == CaptureState.Saved)} of {results.Count} saved ({_folder})");
     }
 
     private static string Shorten(string text) => text.Length <= MaxDetailLength ? text : text[..MaxDetailLength] + "...";
