@@ -49,6 +49,18 @@ internal sealed class DumpLog
         WriteNow(at, message);
     }
 
+    /// <summary>
+    /// Any thread. For routine lines that come back all through play, such as the action ledger's cost each minute: the
+    /// file only. A BepInEx line runs its console and disk listeners on the frame that logs it, and a frame that logged
+    /// the cost line once took 90 ms.
+    /// </summary>
+    public void Note(string message)
+    {
+        var at = DateTime.Now;
+
+        Worker.Post(() => AppendQuietly(at, message));
+    }
+
     /// <summary>The ticker's check: writes the lines other threads left. Costs nothing while there are none.</summary>
     public void Drain(float now)
     {

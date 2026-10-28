@@ -14,7 +14,7 @@ namespace DataDump;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.datadump";
-    private const string Version = "0.3.6";
+    private const string Version = "0.3.7";
 
     /// <summary>How long quitting waits for the files still being written.</summary>
     private static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(3);
@@ -89,7 +89,7 @@ public sealed class Plugin : BasePlugin
 
         var harmony = new Harmony(Guid);
 
-        if (isLedgerOn && ActionLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(ActionLedger.Tick);
+        if (isLedgerOn && ActionLedger.Apply(harmony, folder, log.Write, log.Note, worker)) DumpTicker.Checks.Add(ActionLedger.Tick);
         if (isLootLedgerOn && LootLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(LootLedger.Tick);
         if (isItemLedgerOn && ItemLedger.Apply(harmony, folder, log.Write, worker)) DumpTicker.Checks.Add(ItemLedger.Tick);
         if (isBundleExportOn) BundleExport.Start(Paths.GameDataPath, folder, bundleFilter, log.Write);

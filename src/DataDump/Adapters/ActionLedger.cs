@@ -21,8 +21,8 @@ namespace DataDump.Adapters;
 /// <para>
 /// The hooks run inside the game's own calls, so they do only what a line needs: walking is skipped before anything is
 /// read, a character is sampled only at a start and at the end of its open action, and finished lines wait in memory.
-/// The ticker writes them at most every few seconds, notices a save being left, and logs what the hooks cost once a
-/// minute. Any failure is logged once and never reaches the game. Static because Harmony patches are.
+/// The ticker writes them at most every few seconds, notices a save being left, and writes what the hooks cost to
+/// data-dump.log once a minute. Any failure is logged once and never reaches the game. Static because Harmony patches are.
 /// </para>
 /// </summary>
 internal static class ActionLedger
@@ -44,6 +44,7 @@ internal static class ActionLedger
     private static readonly Stopwatch RealClock = Stopwatch.StartNew();
     private static readonly Every WorldCheck = new(1);
     private static Action<string> _log = _ => { };
+    private static Action<string> _note = _ => { };
     private static SerialWorker? _worker;
     private static string _path = "";
     private static string _oldPath = "";
@@ -56,10 +57,12 @@ internal static class ActionLedger
     /// <summary>The action an ending call removes, kept from the prefix to the postfix.</summary>
     private sealed record Ending(long AgentId, int ActionId);
 
+    /// <param name="note">Writes a routine line to the plugin's file only (the minute's cost).</param>
     /// <returns>Whether the hooks are in place; only then does <see cref="Tick"/> have anything to do.</returns>
-    public static bool Apply(Harmony harmony, string folder, Action<string> log, SerialWorker worker)
+    public static bool Apply(Harmony harmony, string folder, Action<string> log, Action<string> note, SerialWorker worker)
     {
         _log = log;
+        _note = note;
         _worker = worker;
         _path = Path.Combine(folder, FileName);
         _oldPath = Path.Combine(folder, OldFileName);
@@ -90,7 +93,7 @@ internal static class ActionLedger
 
         lock (Gate) costs = Costs.TakeIfDue(now);
 
-        if (costs is not null) _log("action ledger cost, last minute: " + costs);
+        if (costs is not null) _note("action ledger cost, last minute: " + costs);
     }
 
     /// <summary>
