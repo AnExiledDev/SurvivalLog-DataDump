@@ -164,6 +164,7 @@ Config file: `BepInEx/config/com.dev.survivallog.datadump.cfg`. The three keys c
 Other keys nearby:
 
 - The other mods in this collection use F6 to F9, and WebUI Doctor uses Ctrl+F11 and Ctrl+F12. F4, F5 and F10 are free of them. The game binds F1 to F3 to its floor views. Camera keeps F10 out of the keys it lets you bind.
+- With Exiled's Toolkit 0.12.0 or newer installed, the three keys do nothing while you type in a text box.
 - The game lets you bind F keys in its own key settings. If you bind F4, F5 or F10 to a game action there, that action may run on the same press.
 
 ## Contact

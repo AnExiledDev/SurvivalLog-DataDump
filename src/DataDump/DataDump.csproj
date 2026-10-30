@@ -42,7 +42,7 @@
     <AssemblyMetadata Include="ModManager.Description" Value="A developer tool: writes the game's data tables, its text in both languages and its key bindings to plain files once the game has loaded, records each location's map data and pictures and every loot roll, and saves a bug snapshot on Ctrl+F10.&#10;开发者工具：游戏载入后把数据表、中英文文本和按键设置写成普通文件，记录每个地点的地图数据和图片以及每次掉落抽取，按 Ctrl+F10 保存问题快照。" />
     <AssemblyMetadata Include="ModManager.Author" Value="AnExiledDev" />
     <AssemblyMetadata Include="ModManager.Category" Value="Tools" />
-    <AssemblyMetadata Include="ModManager.GameVersion" Value="1.1.19611" />
+    <AssemblyMetadata Include="ModManager.GameVersion" Value="1.1.20151" />
     <AssemblyMetadata Include="ModManager.Settings" Value="Restart" />
     <AssemblyMetadata Include="ModManager.GitHub" Value="AnExiledDev/SurvivalLog-DataDump" />
   </ItemGroup>

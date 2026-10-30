@@ -1,4 +1,5 @@
 using System;
+using DataDump.Core;
 using UnityEngine;
 
 namespace DataDump.Adapters;
@@ -6,10 +7,14 @@ namespace DataDump.Adapters;
 /// <summary>
 /// A Ctrl+key hotkey. Turns itself off if the game has the legacy input API disabled.
 /// Each call into Unity's input boxes its answer through interop, so <see cref="ReadFrame"/> asks once per frame
-/// whether any key went down, and a hotkey asks about its own key only in that frame.
+/// whether any key went down, and a hotkey asks about its own key only in that frame. A key set to None is off, and a
+/// press while a text box has the keyboard is typing, not a hotkey.
 /// </summary>
 internal sealed class CtrlHotkey
 {
+    private static readonly Func<KeyCode, bool> IsCtrlKeyDown = key => Input.GetKeyDown(key) && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl));
+    private static readonly Func<bool> IsTyping = OptionalLive.IsTyping;
+
     private static bool _isAnyKeyDown;
     private static bool _isInputUnavailable;
 
@@ -51,7 +56,7 @@ internal sealed class CtrlHotkey
 
         try
         {
-            return Input.GetKeyDown(_key) && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl));
+            return KeyGate.Fires(_key, KeyCode.None, IsCtrlKeyDown, IsTyping);
         }
         catch (Exception ex)
         {

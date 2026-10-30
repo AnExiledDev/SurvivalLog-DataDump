@@ -14,7 +14,7 @@ namespace DataDump;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.datadump";
-    private const string Version = "0.3.7";
+    private const string Version = "0.3.8";
 
     /// <summary>How long quitting waits for the files still being written.</summary>
     private static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(3);
