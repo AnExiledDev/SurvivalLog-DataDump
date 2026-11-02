@@ -41,6 +41,8 @@ internal sealed class MapCapture
     private readonly Action<string> _log;
     private readonly SerialWorker _worker;
     private readonly ValueWriter _frames = new(new PlainValueReader(), 4, isIndented: true);
+    private readonly ValueWriter _spots = new(new PlainValueReader(), 6, isIndented: true);
+    private readonly HashSet<string> _spotless = new();
     private readonly AutoViews _auto = new();
     private readonly HashSet<string> _givenUpLogged = new(StringComparer.Ordinal);
     private readonly LastResult<ViewKey, ViewOnScreen> _lastView;
@@ -209,7 +211,50 @@ internal sealed class MapCapture
             }
         }
 
+        PostSpots(view, folder, trigger);
+
         return isGood;
+    }
+
+    /// <summary>
+    /// The spot boxes the game's layout view outlines, read on this frame (the scene can change by the next) and written
+    /// to spots.json on the worker. A location with no layout (an expedition, a store) is logged once.
+    /// </summary>
+    private void PostSpots(MapView view, string folder, string trigger)
+    {
+        List<SpotOutline>? spots;
+
+        try
+        {
+            spots = SpotBoxes.Read();
+        }
+        catch (Exception ex)
+        {
+            _log($"map spots {view.Location} failed: {ex}");
+
+            return;
+        }
+
+        if (spots is null)
+        {
+            if (_spotless.Add(view.Location)) _log($"map spots {view.Location}: no layout spots in this location");
+
+            return;
+        }
+
+        _worker.Post(() =>
+        {
+            try
+            {
+                Directory.CreateDirectory(folder);
+                File.WriteAllText(Path.Combine(folder, "spots.json"), _spots.Write(new SpotsDoc(view.Location, spots.Count, spots)) + "\n", Utf8);
+                _log($"map spots {view.Location} ({trigger}): {spots.Count}");
+            }
+            catch (Exception ex)
+            {
+                _log($"map spots {view.Location} failed: {ex}");
+            }
+        });
     }
 
     /// <summary>The picture and its frame are written on the worker; the render had to be on this frame, the disk does not.</summary>
@@ -416,6 +461,8 @@ internal sealed class MapCapture
     private const string ProjectionText = "U = X cos(Yaw) - Z sin(Yaw); V = X sin(Yaw) + Z cos(Yaw) (Yaw in degrees); pixel x = (U - MinU) * PixelsPerMeter from the left; pixel y = (MaxV - V) * PixelsPerMeter from the top";
 
     /// <summary>The .json beside a picture: what the site needs to put a world position on it.</summary>
+    private sealed record SpotsDoc(string Location, int Count, IReadOnlyList<SpotOutline> Spots);
+
     private sealed record FrameDoc(
         string Location,
         string Area,

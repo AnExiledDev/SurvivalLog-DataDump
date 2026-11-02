@@ -72,6 +72,8 @@ A home floor adds `.floor<id>` to the name: `Home.floor102.plan.png` is the seco
 
 Each picture has a `.json` beside it with the frame: its turn `Yaw` in degrees, the box it covers in turned meters (`MinU` to `MaxU`, `MinV` to `MaxV`), the floor and its height, and the pixels per meter. A world position X, Z turns into `U = X cos(Yaw) - Z sin(Yaw)` and `V = X sin(Yaw) + Z cos(Yaw)`, and lands on the picture at `x = (U - MinU) * PixelsPerMeter` from the left and `y = (MaxV - V) * PixelsPerMeter` from the top. With `Yaw` 0, U is X and V is Z. Large pictures are rendered in pieces and joined. The game stops for a few seconds while a large picture is taken.
 
+In a home, each picture run also writes `spots.json` into the same folder: every furniture and building spot as the game's layout view outlines it. Each spot has its `name` (as in the map data), its slot `type`, its `pivot` (the position the map data lists), the `center` of its box, the box's `minY` and `maxY`, and its `outline`: the box seen from above, as X, Z corners in world meters, counter-clockwise. Turn the corners with the frame formula above to draw them on a picture. The pivot and the center differ for spots whose box sits beside their position.
+
 ## Loot ledger
 
 `loot-ledger.tsv` gets one line every time the game rolls a loot group: furniture loot, reward sets, stranger trades and the like. Tab-separated, with a header line.
