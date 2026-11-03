@@ -160,8 +160,10 @@ internal sealed class InputJob : DumpJob
 /// <summary>
 /// code-tables.json: every table the game keeps in code instead of config (<see cref="StaticTables"/>), keyed by class
 /// and field, one table per line, so a game update that changes one shows in a diff. Covers the gameplay assembly. A
-/// table is read through its interop property, which first runs the class's static constructor if the game has not
-/// yet; that constructor is what fills the table. A table that cannot be read is written as an !error string.
+/// table is read through its interop property, which reads the field as it is at that moment and does not run the
+/// class's static constructor. So each class is initialised first (il2cpp_runtime_class_init, which runs the
+/// constructor only if the game has not yet); otherwise a class nothing has touched yet, such as EndingEventCatalog
+/// at the main menu, reads as null. A table that cannot be read is written as an !error string.
 /// </summary>
 internal sealed class CodeTablesJob : DumpJob
 {
@@ -201,13 +203,23 @@ internal sealed class CodeTablesJob : DumpJob
 
         writer.Write(shape.Start);
 
+        // Each class's init result, run once: null when it ran, else the error every table of the class is written as.
+        var initErrors = new Dictionary<Type, string?>();
+
         foreach (var (key, field) in tables)
         {
             string json;
+            var owner = field.DeclaringType!;
+
+            if (!initErrors.TryGetValue(owner, out var initError))
+            {
+                initError = RunClassConstructor(owner);
+                initErrors[owner] = initError;
+            }
 
             try
             {
-                json = values.Write(field.GetValue(null));
+                json = initError is null ? values.Write(field.GetValue(null)) : JsonText.Quote(initError);
             }
             catch (Exception ex)
             {
@@ -222,6 +234,25 @@ internal sealed class CodeTablesJob : DumpJob
         }
 
         writer.Write(shape.Finish(Count));
+    }
+
+    /// <summary>Runs the game class's static constructor if it has not run yet. Null when it ran, else the error.</summary>
+    private static string? RunClassConstructor(Type type)
+    {
+        try
+        {
+            var klass = Il2CppInterop.Runtime.Il2CppClassPointerStore.GetNativeClassPointer(type);
+
+            if (klass == IntPtr.Zero) return ValueWriter.ErrorPrefix + "no game class for " + type.FullName;
+
+            Il2CppInterop.Runtime.IL2CPP.il2cpp_runtime_class_init(klass);
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ValueWriter.ErrorText(ex);
+        }
     }
 
     /// <summary>Interop arrays, and the game's lists, sets and dictionaries.</summary>
