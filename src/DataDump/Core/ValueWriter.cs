@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
@@ -477,7 +478,26 @@ public sealed class ValueWriter
         }
     }
 
-    /// <summary>A dictionary key as text: leaves as their invariant text, enums as names, objects as their id or type.</summary>
+    private string MemberKeyText(MemberView member)
+    {
+        object? value;
+
+        try
+        {
+            value = member.Read();
+        }
+        catch (Exception ex)
+        {
+            return ErrorText(ex);
+        }
+
+        return KeyText(value);
+    }
+
+    /// <summary>
+    /// A dictionary key as text: leaves as their invariant text, enums as names, objects as their id, and an object
+    /// with no id (a tuple) as its members' key texts joined with commas, so two keys that differ only inside stay apart.
+    /// </summary>
     private string KeyText(object? key)
     {
         ValueView view;
@@ -496,6 +516,7 @@ public sealed class ValueWriter
             LeafView leaf => LeafKeyText(leaf.Value),
             EnumView named => named.Name,
             RecordView { Id: { } id } => LeafKeyText(id),
+            RecordView { Members.Count: > 0 } record => string.Join(",", record.Members.Select(MemberKeyText)),
             RecordView record => record.TypeName,
             _ => "(collection)",
         };

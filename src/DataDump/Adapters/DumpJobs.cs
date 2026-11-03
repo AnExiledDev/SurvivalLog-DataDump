@@ -214,7 +214,7 @@ internal sealed class CodeTablesJob : DumpJob
 
             if (!initErrors.TryGetValue(owner, out var initError))
             {
-                initError = RunClassConstructor(owner) ?? TableBuilders.Run(owner, TableBuilders.Game);
+                initError = RunClassConstructor(owner) ?? TableBuilders.Run(owner, TableBuilders.Game, GlobalSettingText);
                 initErrors[owner] = initError;
             }
 
@@ -236,6 +236,9 @@ internal sealed class CodeTablesJob : DumpJob
 
         writer.Write(shape.Finish(Count));
     }
+
+    /// <summary>A global setting's Params3, read with TryGet_Config_GlobalSetting as the game's own callers read it.</summary>
+    private static string? GlobalSettingText(string key) => GameSingleton.Existing<ConfigManager>()?.TryGet_Config_GlobalSetting(key)?.Params3;
 
     /// <summary>Runs the game class's static constructor if it has not run yet. Null when it ran, else the error.</summary>
     private static string? RunClassConstructor(Type type)

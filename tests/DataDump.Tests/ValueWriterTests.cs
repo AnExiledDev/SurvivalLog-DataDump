@@ -105,6 +105,20 @@ public class ValueWriterTests
     }
 
     [Fact]
+    public void Tuple_keys_keep_every_part_so_two_levels_of_one_skill_stay_apart()
+    {
+        // ProficiencyManager.LevelUpTriggerEvents is keyed by (skill, level); writing the key as its type name made
+        // every entry the same key, so only one survived.
+        var map = new FakePairs(
+            new KeyValuePair<object?, object?>(new FakeObject("ValueTuple`2").With("Item1", Weather.Rain).With("Item2", 2), 51213),
+            new KeyValuePair<object?, object?>(new FakeObject("ValueTuple`2").With("Item1", Weather.Rain).With("Item2", 3), 51214),
+            new KeyValuePair<object?, object?>(new FakeObject("ValueTuple`2").WithGetter("Item1", () => throw new InvalidOperationException("gone")).With("Item2", 4), 51215),
+            new KeyValuePair<object?, object?>(new FakeObject("ValueTuple`2").With("Item1", new FakeObject("Config_Item", 9)).With("Item2", 1.5f), 51216));
+
+        Assert.Equal("{\"Rain,2\":51213,\"Rain,3\":51214,\"!error InvalidOperationException: gone,4\":51215,\"9,1.5\":51216}", Write(map));
+    }
+
+    [Fact]
     public void Reflection_wrappers_are_taken_off_an_error()
     {
         var wrapped = new TargetInvocationException(new ArgumentException("bad"));

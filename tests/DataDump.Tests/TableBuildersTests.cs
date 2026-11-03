@@ -25,6 +25,17 @@ public class TableBuildersTests
             return 0f;
         }
 
+        private static bool TryGetMin(int id, out float min)
+        {
+            Cache = new List<int> { id };
+            min = 2.5f;
+            return true;
+        }
+
+        public static List<int>? Stored { get; set; }
+
+        private static List<int> Parse(string raw) => raw.Split(';').Select(int.Parse).ToList();
+
         private static void Broken() => throw new InvalidOperationException("config not loaded");
     }
 #pragma warning restore IDE0051
@@ -51,6 +62,41 @@ public class TableBuildersTests
 
         Assert.Null(error);
         Assert.Equal(new[] { 30 }, LazyTable.Cache);
+    }
+
+    [Fact]
+    public void Run_finds_and_calls_a_builder_with_an_out_argument()
+    {
+        LazyTable.Cache = null;
+
+        var error = TableBuilders.Run(typeof(LazyTable), new[] { new TableBuilders.Builder(Name, "TryGetMin", 4, new TableBuilders.Out(typeof(float))) });
+
+        Assert.Null(error);
+        Assert.Equal(new[] { 4 }, LazyTable.Cache);
+    }
+
+    [Fact]
+    public void Run_stores_what_a_returning_builder_gives_into_the_named_table_reading_its_setting()
+    {
+        LazyTable.Stored = null;
+        var builder = new TableBuilders.Builder(Name, "Parse", new TableBuilders.Setting("Rules")) { Into = "Stored" };
+
+        var error = TableBuilders.Run(typeof(LazyTable), new[] { builder }, key => key == "Rules" ? "3;5" : null);
+
+        Assert.Null(error);
+        Assert.Equal(new[] { 3, 5 }, LazyTable.Stored);
+    }
+
+    [Fact]
+    public void Run_reports_a_missing_setting_instead_of_storing_a_table_parsed_from_nothing()
+    {
+        LazyTable.Stored = null;
+        var builder = new TableBuilders.Builder(Name, "Parse", new TableBuilders.Setting("Rules")) { Into = "Stored" };
+
+        var error = TableBuilders.Run(typeof(LazyTable), new[] { builder }, _ => null);
+
+        Assert.Equal(ValueWriter.ErrorPrefix + "no setting Rules", error);
+        Assert.Null(LazyTable.Stored);
     }
 
     [Fact]

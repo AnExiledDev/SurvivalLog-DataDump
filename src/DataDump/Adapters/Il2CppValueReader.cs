@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using DataDump.Core;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes;
@@ -24,6 +25,7 @@ internal sealed class Il2CppValueReader : IValueReader
     private readonly Dictionary<Type, PropertyInfo[]> _members = new();
     private readonly Dictionary<Type, FieldInfo[]> _structFields = new();
     private readonly Dictionary<IntPtr, Func<IntPtr, object>?> _narrowers = new();
+    private readonly Dictionary<PropertyInfo, Func<object, object?>> _readers = new();
 
     public ValueView Describe(object? value)
     {
@@ -76,7 +78,7 @@ internal sealed class Il2CppValueReader : IValueReader
     private RecordView Record(object value)
     {
         var properties = MembersOf(value.GetType());
-        var members = properties.Select(property => new MemberView(property.Name, () => property.GetValue(value))).ToList();
+        var members = properties.Select(property => new MemberView(property.Name, () => Read(property, value))).ToList();
 
         return new RecordView(value.GetType().Name, IdOf(value, properties), members);
     }
@@ -89,12 +91,64 @@ internal sealed class Il2CppValueReader : IValueReader
 
             if (property is null) continue;
 
-            var id = property.GetValue(value);
+            var id = Read(property, value);
 
             if (id is not null && Describe(id) is LeafView) return id;
         }
 
         return null;
+    }
+
+    private object? Read(PropertyInfo property, object value)
+    {
+        if (!_readers.TryGetValue(property, out var read))
+        {
+            read = ReaderFor(property);
+            _readers[property] = read;
+        }
+
+        return read(value);
+    }
+
+    /// <summary>
+    /// How one member is read. Interop's getter for a value-type field of a generic class calls
+    /// IL2CPP.PointerToValueGeneric with valueTypeWouldBeBoxed false, which boxes the field and then boxes that box
+    /// again, so it returns the bits of the box's class pointer: every int of a ValueTuple read 1076244624. Those fields
+    /// are read with the same interop call told the value is boxed once, from the field's own address.
+    /// </summary>
+    private static Func<object, object?> ReaderFor(PropertyInfo property)
+    {
+        var declaring = property.DeclaringType;
+
+        if (declaring is null || !declaring.IsGenericType) return property.GetValue;
+
+        var fieldClass = Il2CppClassPointerStore.GetNativeClassPointer(property.PropertyType);
+
+        if (fieldClass == IntPtr.Zero)
+        {
+            return property.PropertyType.IsValueType ? _ => throw new InvalidOperationException($"no game class for {property.PropertyType.Name}") : property.GetValue;
+        }
+
+        if (!IL2CPP.il2cpp_class_is_valuetype(fieldClass)) return property.GetValue;
+
+        RuntimeHelpers.RunClassConstructor(declaring.TypeHandle);
+
+        var field = FieldPointer(declaring, property.Name);
+
+        if (field == IntPtr.Zero) return _ => throw new InvalidOperationException($"no field pointer for {declaring.Name}.{property.Name}");
+
+        var offset = (int)IL2CPP.il2cpp_field_get_offset(field);
+        var read = typeof(IL2CPP).GetMethod(nameof(IL2CPP.PointerToValueGeneric))!.MakeGenericMethod(property.PropertyType);
+
+        return value => read.Invoke(null, new object[] { ((Il2CppObjectBase)value).Pointer + offset, true, true });
+    }
+
+    private static IntPtr FieldPointer(Type declaring, string name)
+    {
+        const BindingFlags statics = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly;
+        var pointer = declaring.GetField(FieldPointerPrefix + name, statics) ?? declaring.GetField(FieldPointerPrefix + "_" + name + BackingFieldSuffix, statics);
+
+        return pointer?.GetValue(null) is IntPtr found ? found : IntPtr.Zero;
     }
 
     private RecordView Struct(object value)
