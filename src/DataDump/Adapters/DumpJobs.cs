@@ -163,7 +163,8 @@ internal sealed class InputJob : DumpJob
 /// table is read through its interop property, which reads the field as it is at that moment and does not run the
 /// class's static constructor. So each class is initialised first (il2cpp_runtime_class_init, which runs the
 /// constructor only if the game has not yet); otherwise a class nothing has touched yet, such as EndingEventCatalog
-/// at the main menu, reads as null. A table that cannot be read is written as an !error string.
+/// at the main menu, reads as null. Tables the game fills only on first use are then built the way the game builds
+/// them (<see cref="TableBuilders"/>). A table that cannot be read is written as an !error string.
 /// </summary>
 internal sealed class CodeTablesJob : DumpJob
 {
@@ -203,7 +204,7 @@ internal sealed class CodeTablesJob : DumpJob
 
         writer.Write(shape.Start);
 
-        // Each class's init result, run once: null when it ran, else the error every table of the class is written as.
+        // Each class's init and build result, run once: null when both ran, else the error every table of the class is written as.
         var initErrors = new Dictionary<Type, string?>();
 
         foreach (var (key, field) in tables)
@@ -213,7 +214,7 @@ internal sealed class CodeTablesJob : DumpJob
 
             if (!initErrors.TryGetValue(owner, out var initError))
             {
-                initError = RunClassConstructor(owner);
+                initError = RunClassConstructor(owner) ?? TableBuilders.Run(owner, TableBuilders.Game);
                 initErrors[owner] = initError;
             }
 
