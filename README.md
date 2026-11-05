@@ -108,7 +108,7 @@ Lines are written every 5 seconds, like the loot ledger.
 
 ## Asset bundles
 
-With `Bundles.Export` on, the plugin writes the game's asset bundles at game start, decrypted, to `bundles/<name>.bundle`, where asset tools such as AssetRipper can open them. It runs beside the game and logs when it is done. All of them take about 4 GB; `Bundles.Filter` limits it to names containing one of its words. A bundle already written at its full size is skipped.
+With `Bundles.Export` on, the plugin writes the game's asset bundles at game start, decrypted, to `bundles/<name>.bundle`, where asset tools such as AssetRipper can open them. It runs beside the game and logs when it is done. All of them take about 4 GB; `Bundles.Filter` limits it to names containing one of its words. A bundle already written is skipped unless a game update changed it since, so leaving it on after an update rewrites only the changed bundles.
 
 ## Action ledger
 

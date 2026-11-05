@@ -10,8 +10,8 @@ namespace DataDump.Adapters;
 /// <summary>
 /// Writes the game's asset bundles decrypted to bundles/&lt;logical name&gt;, for tools such as AssetRipper or UnityPy
 /// (scheme: <see cref="BundleCrypto"/>). Off unless the player turns it on. Plain file work with no game reads, so it
-/// runs on a thread of its own and the game does not wait for it. A bundle already written at its full size is skipped,
-/// so turning it on again only writes what is missing.
+/// runs on a thread of its own and the game does not wait for it. A bundle already written, at the same size and after
+/// the game last changed it, is skipped, so turning it on again only writes what is missing or changed.
 /// </summary>
 internal static class BundleExport
 {
@@ -87,12 +87,19 @@ internal static class BundleExport
 
         var target = Path.Combine(outputFolder, match.Name);
 
-        if (File.Exists(target) && new FileInfo(target).Length == source.Length) return Outcome.AlreadyThere;
+        if (BundleFreshness.IsCurrent(Stamp(target), new FileStamp(source.Length, File.GetLastWriteTimeUtc(file)))) return Outcome.AlreadyThere;
 
         source.Position = 0;
         Decrypt(source, target, match.Key);
 
         return Outcome.Written;
+    }
+
+    private static FileStamp? Stamp(string path)
+    {
+        var info = new FileInfo(path);
+
+        return info.Exists ? new FileStamp(info.Length, info.LastWriteTimeUtc) : null;
     }
 
     /// <summary>Written beside the final name and moved there, so a half-written bundle never looks whole.</summary>

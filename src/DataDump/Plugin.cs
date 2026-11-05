@@ -14,7 +14,7 @@ namespace DataDump;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.datadump";
-    private const string Version = "0.3.12";
+    private const string Version = "0.3.13";
 
     /// <summary>How long quitting waits for the files still being written.</summary>
     private static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(3);
@@ -61,8 +61,8 @@ public sealed class Plugin : BasePlugin
             "Write one line to BepInEx/data-dump/item-ledger.tsv for every item the game puts into a bag (yours, a container's, a robot's): the day, the location, whose bag, the item, how many, and what gave it, such as a reward, a story drop or container loot. Default: on. Takes effect at the next game start.\n" +
             "游戏每把一件物品放进背包（你的、容器的、机器人的）时，在 BepInEx/data-dump/item-ledger.tsv 里写一行：天数、地点、谁的背包、物品、数量，以及来源，例如奖励、剧情掉落或容器战利品。默认开启。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
         var isBundleExportOn = Config.Bind("Bundles", "Export", false, new ConfigDescription(
-            "At game start, write the game's asset bundles decrypted to BepInEx/data-dump/bundles, for asset tools. All of them take about 4 GB; bundles already written are skipped. Default: off. Takes effect at the next game start.\n" +
-            "游戏启动时，把游戏的资源包解密后写入 BepInEx/data-dump/bundles 文件夹，供资源工具使用。全部约 4 GB；已写入的资源包会跳过。默认关闭。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
+            "At game start, write the game's asset bundles decrypted to BepInEx/data-dump/bundles, for asset tools. All of them take about 4 GB; bundles already written are skipped unless a game update changed them. Default: off. Takes effect at the next game start.\n" +
+            "游戏启动时，把游戏的资源包解密后写入 BepInEx/data-dump/bundles 文件夹，供资源工具使用。全部约 4 GB；已写入的资源包会跳过，游戏更新改动过的除外。默认关闭。下次启动游戏时生效。", null, "ModManager.Restart")).Value;
         var bundleFilter = Config.Bind("Bundles", "Filter", "", new ConfigDescription(
             "Only export bundles whose name contains one of these words, separated by commas (for example: texture_item, battlescene). Empty: every bundle. Takes effect at the next game start.\n" +
             "只导出名称包含这些词之一的资源包，用英文逗号分隔（例如：texture_item, battlescene）。留空：全部资源包。下次启动游戏时生效。", null, "ModManager.Restart", "ModManager.ShowWhen=Export")).Value;
