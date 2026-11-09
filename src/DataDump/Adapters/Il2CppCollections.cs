@@ -26,7 +26,7 @@ internal static class Il2CppCollections
     /// <summary>True when the collection's items are key-value pairs.</summary>
     public static bool IsDictionary(Type type) => WalkOf(type) is { IsPairs: true };
 
-    /// <summary>The items, read lazily: each MoveNext is one step of the game's own enumerator.</summary>
+    /// <summary>The items, read lazily: each MoveNext is one step of the game's enumerator.</summary>
     public static IEnumerable<object?> Items(object collection)
     {
         var walk = WalkOf(collection.GetType()) ?? throw new InvalidOperationException(collection.GetType().Name + " is not an Il2Cpp collection");

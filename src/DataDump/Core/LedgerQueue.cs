@@ -7,7 +7,7 @@ namespace DataDump.Core;
 public sealed record LedgerBatch(IReadOnlyList<LedgerEntry> Rows, int Dropped);
 
 /// <summary>
-/// Finished ledger rows wait here so the game's own calls never touch the disk. They are taken at most once every
+/// Finished ledger rows wait here so the game's calls never touch the disk. They are taken at most once every
 /// <see cref="FlushSeconds"/>, and the queue never holds more than <see cref="MaxRows"/>: past that, rows are counted
 /// and dropped, so a ledger that cannot write cannot grow the game's memory either.
 /// </summary>

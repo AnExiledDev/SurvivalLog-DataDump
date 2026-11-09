@@ -3,7 +3,7 @@ using Xunit;
 
 namespace DataDump.Tests;
 
-// The game's own calls only queue rows; the disk is touched at most once per flush interval, from the ticker.
+// The game's calls only queue rows; the disk is touched at most once per flush interval, from the ticker.
 public class LedgerQueueTests
 {
     private static readonly IReadOnlyDictionary<string, AttrSample> NoAttrs = new Dictionary<string, AttrSample>();

@@ -8,7 +8,7 @@ public class HookFailureTests
     [Fact]
     public void A_hook_that_could_not_be_placed_is_an_error()
     {
-        Assert.True(HookFailure.Is("could not hook GameType.Method, it keeps the game's own behavior: method not found"));
+        Assert.True(HookFailure.Is("could not hook GameType.Method, it keeps the game's behavior: method not found"));
     }
 
     [Fact]

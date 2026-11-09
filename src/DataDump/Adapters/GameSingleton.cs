@@ -18,7 +18,7 @@ internal static class GameSingleton
     public static bool IsCreated<T>() where T : BaseSingleton<T>, new() => Pointer<T>() != IntPtr.Zero;
 
     /// <summary>
-    /// The singleton's native address, or zero before the game makes it. The game's own IsInstanceCreated only checks
+    /// The singleton's native address, or zero before the game makes it. The game's IsInstanceCreated only checks
     /// this field, but through interop each call boxes its answer, so the field is read directly.
     /// </summary>
     public static unsafe IntPtr Pointer<T>() where T : BaseSingleton<T>, new()

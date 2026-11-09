@@ -41,7 +41,7 @@ internal static class PatchKit
         }
         catch (Exception)
         {
-            // Fail runs inside the game's own calls; a logger that throws must not carry the exception into them.
+            // Fail runs inside the game's calls; a logger that throws must not carry the exception into them.
         }
     }
 }

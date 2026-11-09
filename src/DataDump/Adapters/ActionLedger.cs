@@ -19,7 +19,7 @@ namespace DataDump.Adapters;
 /// relative jump or call in its first 14 bytes (GameAssembly.dll.asm: push/sub rsp for PlayAction, mov/push/sub rsp for
 /// RemoveActionCall).
 /// <para>
-/// The hooks run inside the game's own calls, so they do only what a line needs: walking is skipped before anything is
+/// The hooks run inside the game's calls, so they do only what a line needs: walking is skipped before anything is
 /// read, a character is sampled only at a start and at the end of its open action, and finished lines wait in memory.
 /// The ticker writes them at most every few seconds, notices a save being left, and writes what the hooks cost to
 /// data-dump.log once a minute. Any failure is logged once and never reaches the game. Static because Harmony patches are.

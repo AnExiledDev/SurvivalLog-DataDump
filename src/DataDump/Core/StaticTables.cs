@@ -34,6 +34,6 @@ public static class StaticTables
             .ToList();
     }
 
-    /// <summary>The key a table is written under: the game's own type name and field name.</summary>
+    /// <summary>The key a table is written under: the game's type name and field name.</summary>
     public static string Key(Type type, PropertyInfo field) => (type.FullName ?? type.Name).Replace('+', '.') + "." + field.Name;
 }

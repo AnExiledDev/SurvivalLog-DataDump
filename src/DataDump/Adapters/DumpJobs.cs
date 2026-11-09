@@ -45,7 +45,7 @@ internal abstract class DumpJob
     }
 }
 
-/// <summary>One config table as JSON lines, one row per step, in the game's own order.</summary>
+/// <summary>One config table as JSON lines, one row per step, in the game's order.</summary>
 internal sealed class TableJob : DumpJob
 {
     private readonly Func<object?> _readTable;
@@ -237,7 +237,7 @@ internal sealed class CodeTablesJob : DumpJob
         writer.Write(shape.Finish(Count));
     }
 
-    /// <summary>A global setting's Params3, read with TryGet_Config_GlobalSetting as the game's own callers read it.</summary>
+    /// <summary>A global setting's Params3, read with TryGet_Config_GlobalSetting as the game's callers read it.</summary>
     private static string? GlobalSettingText(string key) => GameSingleton.Existing<ConfigManager>()?.TryGet_Config_GlobalSetting(key)?.Params3;
 
     /// <summary>Runs the game class's static constructor if it has not run yet. Null when it ran, else the error.</summary>
@@ -299,7 +299,7 @@ internal sealed class EnumJob : DumpJob
         if (unreadable > 0) _log($"enums: {unreadable} enum types could not be read and are not in enums.json");
     }
 
-    /// <summary>The game's own code: HotUpdate (gameplay, where ConfigManager lives) and AOT (startup).</summary>
+    /// <summary>The game's code: HotUpdate (gameplay, where ConfigManager lives) and AOT (startup).</summary>
     private static IEnumerable<Type> GameEnums() =>
         AppDomain.CurrentDomain.GetAssemblies()
             .Where(assembly => assembly.GetName().Name is { } name && GameAssemblies.Contains(name))
